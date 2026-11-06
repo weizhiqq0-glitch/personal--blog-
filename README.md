@@ -66,3 +66,12 @@ npm run dev
 通过 Git 克隆整个仓库，在前后端分别执行 npm ci。不要复制 node_modules，依赖会根据锁文件重新安装。环境变量需要在部署平台单独设置，密码等私密配置不要提交到仓库。
 
 本地开发启动器不用于生产服务器；生产部署应构建前端，并为后端设置正式启动命令和进程管理。
+
+## 使用 GitHub Pages 发布（当前采用）
+
+1. 在仓库 Settings → Pages → Build and deployment 中，将 Source 选择为 GitHub Actions。
+2. 推送 main 分支后，Actions 中的 Deploy blog to GitHub Pages 会自动构建和发布。
+3. 如果代码已推送才开启 Pages，可到 Actions 选择此工作流，点击 Run workflow。
+4. 部署成功后的网址：https://weizhiqq0-glitch.github.io/personal--blog-/
+
+GitHub Pages 只运行静态前端，无法运行 Express 后端。当前示例页面可独立发布，电脑关机也能访问。账号、数据库和评论尚未实现，后续继续开发并另外部署后端。
