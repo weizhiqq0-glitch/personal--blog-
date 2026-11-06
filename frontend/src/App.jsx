@@ -7,11 +7,16 @@ import './App.css';
 import { usePageVisit } from './usePageVisit';
 import { useTheme } from './useTheme';
 import { SiteStatus } from './SiteStatus';
+import { DailyNews } from './DailyNews';
+import { Playground } from './Playground';
+import { Pet } from './Pet';
+import { usePageTitle } from './usePageTitle';
 
 const date = value => new Date(value).toLocaleString('zh-CN');
 const initialDraft = { title: '', content: '', tags: '' };
 export default function App() {
   usePageVisit();
+  usePageTitle();
   const { dark, theme, choose } = useTheme();
   const [keyword, setKeyword] = useState('');
   const [articles, setArticles] = useState([]);
@@ -86,8 +91,8 @@ export default function App() {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     run(async () => {
-      const payload = { username: data.get('username'), password: data.get('password'), contactType: 'email', contact: data.get('contact'), code: data.get('code'), verificationId: data.get('verificationId') };
-      const path = authMode === 'bind' ? '/auth/contact' : authMode === 'reset' ? '/auth/password/reset' : '/auth/' + authMode;
+      const payload = { username: data.get('username'), password: data.get('password'), contactType: 'email', contact: data.get('contact'), code: data.get('code'), verificationId: data.get('verificationId'), entryCode: data.get('entryCode') };
+      const path = data.get('ownerLogin') === 'yes' ? '/auth/owner-login' : authMode === 'bind' ? '/auth/contact' : authMode === 'reset' ? '/auth/password/reset' : '/auth/' + authMode;
       const result = await api(path, { method: 'POST', body: JSON.stringify(payload) });
       if (authMode === 'bind') { setUser(result); setAuthMode(null); setMessage('邮箱绑定成功，账号权限已生效'); await refresh(); return; }
       if (authMode === 'reset') { setAuthMode('login'); setMessage(result.message); return; }
@@ -125,9 +130,11 @@ export default function App() {
     <main className={dark ? 'page dark' : 'page'}>
       <div className="layout">
         <header className="topbar">
-          <a className="brand" href="#" onClick={closePanels}><span className="brand-mark">✦</span><span>我的小站</span></a>
+          <a className="brand" href="#" onClick={closePanels}><span className="brand-mark">✦</span><span>mowu的小站</span></a>
           <nav>
             <a href="#articles" onClick={closePanels}>文章</a>
+            <a className="feature-nav" href="#daily" onClick={closePanels}>每日60s</a>
+            <a className="feature-nav" href="#playground" onClick={closePanels}>游乐场</a>
             {user ? <><span className="account">{user.username} · {roleNames[user.role]}</span>{admin && <button disabled={busy} onClick={() => writeArticle()}>写文章</button>}{canManage && <button disabled={busy} onClick={() => { closePanels(); setManagement(true); }}>账号管理</button>}<button disabled={busy} onClick={() => run(async () => {
               try { await api('/auth/logout', { token, method: 'POST' }); } catch (e) { if (e.status !== 401) throw e; }
               sessionStorage.removeItem('blog-token'); setToken(''); setUser(null); setEditing(false); setManagement(false); setMessage('已退出登录');
@@ -167,9 +174,12 @@ export default function App() {
         <section id="articles"><div className="section-heading"><div><p className="eyebrow">最新记录</p><h2>最近写了什么</h2></div><label className="search"><Icon name="search" size={18} /><input aria-label="搜索文章或标签" value={keyword} onChange={e => setKeyword(e.target.value)} placeholder="搜索文章或标签" /></label></div>
           {loading ? <p className="empty">正在加载文章…</p> : <><div className="article-grid">{visible.map(a => <article key={a.id} className="article-card"><div className="article-icon"><Icon name="book" size={24} /></div><p className="article-date">{date(a.created_at)} · {a.comment_count}条评论</p><h3>{a.title}</h3><p className="article-summary">{a.summary}</p><div className="article-footer"><div className="tags">{a.tags.map(t => <span key={t}>#{t}</span>)}</div><button className="read-button" disabled={busy} onClick={() => openArticle(a.id)}>阅读 →</button></div></article>)}</div>{!visible.length && !error && <div className="empty"><span className="empty-icon"><Icon name="book" size={32} /></span><h3>{keyword ? '没有找到这篇故事' : '故事，从这里开始'}</h3><p>{keyword ? '换个词试试，或许会有新的发现。' : '第一篇文章正在酝酿，值得记录的日子都不必着急。'}</p>{admin && !keyword && <button className="read-button" onClick={() => writeArticle()}>写下第一篇文章 →</button>}</div>}</>}
         </section>
+        <DailyNews />
+        <Playground />
         <SiteStatus />
-        <footer>© {year} 我的小站 · 用心记录每一天</footer>
+        <footer>© {year} mowu的小站 · 用心记录每一天</footer>
       </div>
+      <Pet hidden={!!authMode} />
     </main>
   );
 }

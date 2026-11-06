@@ -10,7 +10,7 @@ const { createEmailSender } = require('./email');
 function createApi(options) {
   const { hashPassword, verifyPassword } = options.passwords || security;
   const db = options.database;
-  const accounts = createAccounts({ db, mailPolicy: options.mailPolicy, passwords: { hashPassword, verifyPassword }, emailSender: options.emailSender || createEmailSender(options.emailConfig) });
+  const accounts = createAccounts({ db, ownerEntryHash: options.ownerEntryHash || process.env.OWNER_ENTRY_CODE_HASH, mailPolicy: options.mailPolicy, passwords: { hashPassword, verifyPassword }, emailSender: options.emailSender || createEmailSender(options.emailConfig) });
   const app = express();
   app.locals.db = db;
   app.disable('x-powered-by');

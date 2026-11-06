@@ -18,9 +18,10 @@ Write-Host '6  首次部署后端（搬迁到新账号时使用）'
 Write-Host '7  创建线上站主（已有站主不要重复创建）'
 Write-Host '8  校准线上邮件额度（首次启用或站主尚未验证时使用）'
 Write-Host '9  打开项目文件夹'
+Write-Host '10 配置站主三次点击入口'
 Write-Host '0  退出'
 $choice = Read-Host '请输入数字'
-$scripts = @{ '1'='start-blog.ps1'; '2'='update-backend.ps1'; '3'='publish-blog.ps1'; '4'='check-public.ps1'; '5'='configure-email.ps1'; '6'='deploy-free-backend.ps1' }
+$scripts = @{ '1'='start-blog.ps1'; '2'='update-backend.ps1'; '3'='publish-blog.ps1'; '4'='check-public.ps1'; '5'='configure-email.ps1'; '6'='deploy-free-backend.ps1'; '10'='configure-owner-entry.ps1' }
 try {
     if ($scripts.ContainsKey($choice)) {
         & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot $scripts[$choice])

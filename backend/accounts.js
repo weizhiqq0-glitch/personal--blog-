@@ -1,11 +1,11 @@
 const express = require('express');
-const { randomBytes } = require('node:crypto');
+const { randomBytes, timingSafeEqual } = require('node:crypto');
 const { validateCredentials, tokenHash } = require('./security');
 const { PERMISSIONS, effectivePermissions, publicUser } = require('./permissions');
 const { createVerification, normalizeContact } = require('./verification');
 
 const { createMailBudget } = require('./mail-budget');
-function createAccounts({ db, passwords, emailSender, mailPolicy }) {
+function createAccounts({ db, passwords, emailSender, mailPolicy, ownerEntryHash }) {
   const budget = createMailBudget(db, mailPolicy);
   const verification = createVerification(db, emailSender, budget);
   let loginReady;
@@ -56,6 +56,24 @@ function createAccounts({ db, passwords, emailSender, mailPolicy }) {
   }
   function authRouter(authLimit, issueSession) {
     const router = express.Router();
+    function validEntry(value) {
+      return /^[a-f0-9]{64}$/.test(ownerEntryHash || '') && typeof value === 'string' && value.length <= 128 && timingSafeEqual(Buffer.from(tokenHash(value), 'hex'), Buffer.from(ownerEntryHash, 'hex'));
+    }
+    router.post('/owner-entry', authLimit, (req, res) => {
+      if (!ownerEntryHash) return fail(res, 503, '站主专属入口尚未配置，请先运行配置站主入口工具');
+      if (!validEntry(req.body?.entryCode)) return fail(res, 401, '入口口令不正确');
+      res.json({ message: '入口验证通过，请继续输入站主账号和密码' });
+    });
+    router.post('/owner-login', authLimit, async (req, res) => {
+      if (!validEntry(req.body?.entryCode)) return fail(res, 401, '入口验证失效，请重新打开站主入口');
+      const { username, password } = req.body || {};
+      if (typeof username !== 'string' || username.length > 32 || typeof password !== 'string' || !password || password.length > 128) return fail(res, 401, '站主账号或密码错误');
+      const user = await db.prepare('SELECT * FROM users WHERE username=?').get(username);
+      const matches = await passwords.verifyPassword(password, user?.password_hash || '00000000000000000000000000000000:' + '00'.repeat(64));
+      if (!matches || user?.role !== 'owner' || user.banned) return fail(res, 401, '站主账号或密码错误');
+      await recordLogin(req, user);
+      res.json(await issueSession(user));
+    });
     router.get('/options', (req, res) => res.json({ emailVerification: verification.available, phoneVerification: false, passwordMin: 6, passwordMax: 14 }));
     router.post('/verification-code', authLimit, async (req, res) => {
       const { contactType = 'email', contact: value, purpose } = req.body || {};
@@ -98,6 +116,7 @@ function createAccounts({ db, passwords, emailSender, mailPolicy }) {
       const matches = await passwords.verifyPassword(password, user?.password_hash || '00000000000000000000000000000000:' + '00'.repeat(64));
       if (!user || !matches) return fail(res, 401, '用户名或密码错误');
       if (user.banned) return fail(res, 403, '此账号已被封禁，请联系站主');
+      if (user.role === 'owner' && ownerEntryHash) return fail(res, 403, '请使用站主专属入口登录');
       await recordLogin(req, user);
       res.json(await issueSession(user));
     });

@@ -14,6 +14,7 @@ if (env.DATABASE_URL) {
     authLimit: security.createOnlineAuthLimit(database),
     emailConfig: env,
     trustCloudflare: true,
+    ownerEntryHash: env.OWNER_ENTRY_CODE_HASH,
   });
   app.listen(3000);
 }

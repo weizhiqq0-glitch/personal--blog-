@@ -6,6 +6,7 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     base: './',
+    build: { rollupOptions: { input: { main: 'index.html', pet: 'pet.html' } } },
     server: {
       proxy: {
         '/api': { target: process.env.BLOG_BACKEND_URL || env.BLOG_BACKEND_URL || 'http://127.0.0.1:3000', changeOrigin: true },
