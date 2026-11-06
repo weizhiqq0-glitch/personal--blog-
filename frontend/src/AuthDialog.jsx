@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Icon } from './Icon';
 import { api } from './api';
 
@@ -12,6 +12,8 @@ export function AuthDialog({ mode, busy, error, onClose, onModeChange, onSubmit,
   const [remaining, setRemaining] = useState(0);
   const [deliveryMessage, setDeliveryMessage] = useState('');
   const [emailAvailable, setEmailAvailable] = useState(null);
+  const [connectionError, setConnectionError] = useState('');
+  const [connecting, setConnecting] = useState(true);
   const clicks = useRef({ count: 0, time: 0 });
   const [ownerStep, setOwnerStep] = useState('');
   const [entryCode, setEntryCode] = useState('');
@@ -34,7 +36,19 @@ export function AuthDialog({ mode, busy, error, onClose, onModeChange, onSubmit,
   const reset = mode === 'reset';
   const needsCode = register || binding || reset;
   const disabled = busy || sending;
-  useEffect(() => { let active = true; api('/auth/options').then(options => { if (active) setEmailAvailable(options.emailVerification); }).catch(e => { if (active) setValidation(e.message); }); return () => { active = false; }; }, []);
+  const checkConnection = useCallback(async () => {
+    setConnecting(true); setConnectionError('');
+    try { const options = await api('/auth/options'); setEmailAvailable(options.emailVerification); }
+    catch (e) { setConnectionError(e.message); }
+    finally { setConnecting(false); }
+  }, []);
+  useEffect(() => {
+    let active = true;
+    api('/auth/options').then(options => { if (active) setEmailAvailable(options.emailVerification); })
+      .catch(e => { if (active) setConnectionError(e.message); })
+      .finally(() => { if (active) setConnecting(false); });
+    return () => { active = false; };
+  }, []);
   useEffect(() => { if (!remaining) return; const timer = setTimeout(() => setRemaining(value => value - 1), 1000); return () => clearTimeout(timer); }, [remaining]);
   async function sendCode() {
     const input = dialog.current.querySelector('#auth-email');
@@ -103,6 +117,9 @@ export function AuthDialog({ mode, busy, error, onClose, onModeChange, onSubmit,
               {deliveryMessage && <span className="field-hint" role="status">{deliveryMessage}</span>}
               {emailAvailable === false && <span className="auth-error">邮箱发信服务尚未配置，请站主先完成配置。</span>}
             </>}
+            {connectionError && <div className="auth-error" role="alert"><span>{connectionError}</span></div>}
+            {(connectionError || error || validation) && <button type="button" disabled={connecting || disabled} onClick={checkConnection}>{connecting ? '正在重新连接…' : '重新连接'}</button>}
+            {connecting && <p className="field-hint" role="status">正在检查服务器连接…</p>}
             {(validation || error) && <div className="auth-error" role="alert"><Icon name="info" size={16} /><span>{validation || error}</span></div>}
             <button className="auth-submit" type="submit" disabled={disabled || (needsCode && emailAvailable === false)}>{busy ? '请稍候…' : binding ? '验证并绑定' : reset ? '重置密码' : register ? '创建账号' : '登录小站'}<Icon name="arrow" size={18} /></button>
           </form>}
