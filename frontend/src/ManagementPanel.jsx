@@ -8,7 +8,7 @@ function UserEditor({ account, labels, disabled, save }) {
   const [permissions, setPermissions] = useState(account.overrides);
   return <details className="permission-editor"><summary>角色与权限</summary><form onSubmit={event => { event.preventDefault(); save({ role, permissions }); }}>
     <label>身份<select aria-label="身份" value={role} onChange={event => setRole(event.target.value)} disabled={disabled}><option value="user">用户</option><option value="admin">管理员</option></select></label>
-    <p className="muted">“默认”使用该身份的基础权限；单独设置可以授权或限制。</p>
+    <p className="muted">“默认”使用该身份的基础权限；管理权限仅对站主与管理员身份生效。普通用户需先提升为管理员才能进入后台。</p>
     <div className="permission-grid">{Object.entries(labels).map(([key, label]) => <label key={key}>{label}<select aria-label={account.username + '的' + label} value={Object.hasOwn(permissions, key) ? String(permissions[key]) : 'default'} disabled={disabled} onChange={event => setPermissions(value => { const next = { ...value }; if (event.target.value === 'default') delete next[key]; else next[key] = event.target.value === 'true'; return next; })}><option value="default">默认</option><option value="true">允许</option><option value="false">禁止</option></select></label>)}</div>
     <button className="primary-button" disabled={disabled}>保存授权</button>
   </form></details>;

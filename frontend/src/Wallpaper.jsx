@@ -29,44 +29,36 @@ export function Wallpaper({ wallpaper }) {
 export function WallpaperSettings({ wallpaper }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
-  const input = useRef(null);
-  async function select(event) {
-    const file = event.target.files?.[0];
-    if (!file || busy) return;
-    const image = ['image/jpeg', 'image/png', 'image/webp'].includes(file.type);
-    const video = ['video/mp4', 'video/webm'].includes(file.type);
-    if ((!image && !video) || file.size > (video ? 40 : 10) * 1024 * 1024) { setMessage('请选择10MB以内的JPG/PNG/WebP，或40MB以内的MP4/WebM'); return; }
+  const [kind, setKind] = useState('image');
+  const [url, setUrl] = useState('');
+  async function run(action) {
+    if (busy) return;
     setBusy(true); setMessage('');
-    try {
-      if (image) { const bitmap = await createImageBitmap(file); bitmap.close(); }
-      else {
-        const url = URL.createObjectURL(file);
-        try {
-          await new Promise((resolve, reject) => {
-            const element = document.createElement('video');
-            const finish = error => { clearTimeout(timer); element.removeAttribute('src'); element.load(); if (error) reject(error); else resolve(); };
-            const timer = setTimeout(() => finish(Error('视频读取超时，请换一个文件')), 10000);
-            element.onloadedmetadata = () => finish(); element.onerror = () => finish(Error('浏览器无法播放该视频，请换用MP4（H.264）'));
-            element.preload = 'metadata'; element.src = url;
-          });
-        } finally { URL.revokeObjectURL(url); }
-      }
-      await wallpaper.save({ blob: file, kind: video ? 'video' : 'image', name: file.name });
-      setMessage('背景已应用，切换页面也会保留');
-    } catch (e) { setMessage(e.message); } finally { setBusy(false); }
+    try { await action(); } catch (e) { setMessage(e.message); } finally { setBusy(false); }
   }
-  async function clear() {
-    setBusy(true);
-    try { await wallpaper.save(null); if (input.current) input.current.value = ''; setMessage('已恢复小站默认背景'); }
-    catch (e) { setMessage(e.message); } finally { setBusy(false); }
+  async function select(event) {
+    const file = event.target.files?.[0]; if (!file) return;
+    run(async () => {
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 10 * 1024 * 1024) throw Error('请选择10MB以内的 JPG、PNG 或 WebP 图片');
+      const bitmap = await createImageBitmap(file); let image;
+      try {
+        const scale = Math.min(1, 1920 / bitmap.width, 1920 / bitmap.height);
+        const canvas = document.createElement('canvas'); canvas.width = Math.max(1, Math.round(bitmap.width * scale)); canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+        const context = canvas.getContext('2d'); context.fillStyle = '#fff'; context.fillRect(0, 0, canvas.width, canvas.height); context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        image = canvas.toDataURL('image/jpeg', .82);
+        if (image.length > 699075) image = canvas.toDataURL('image/jpeg', .5);
+        if (image.length > 699075) throw Error('图片压缩后仍较大，请选择更小的图片或填写图片直链');
+      } finally { bitmap.close(); }
+      await wallpaper.save({ image }); setMessage('全站背景图片已发布，其他访客刷新网页后即可看到');
+    });
   }
-  return <section className="article-card panel settings-page"><p className="eyebrow">YOUR OWN SCENERY</p><h1>背景设置</h1><p className="muted">给自己的小站视角，换一片喜欢的风景。</p>
-    <label>选择图片或动态壁纸<input ref={input} type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm" onChange={select} disabled={busy} /></label>
-    <p>图片不超过10MB，视频不超过40MB。动态壁纸静音循环播放。</p>
-    <p className="muted">仅保存在当前浏览器、当前账号下，不上传服务器、不影响其他人。更换设备需重新设置，清除网站数据会清除壁纸。</p>
-    <p className="muted">Wallpaper Engine 的图片和视频文件可以使用；Steam 创意工坊链接、场景包和可执行程序无法直接作为网页背景。</p>
-    {wallpaper.value && <p>当前背景：{wallpaper.value.name}</p>}
-    <button disabled={busy || !wallpaper.value} onClick={clear}>{busy ? '处理中…' : '恢复默认背景'}</button>
+  function saveUrl(event) { event.preventDefault(); run(async () => { await wallpaper.save({ kind, url }); setMessage('全站背景已发布，其他访客刷新网页后即可看到'); }); }
+  return <section className="article-card panel settings-page"><p className="eyebrow">SITE APPEARANCE</p><h1>全站背景</h1><p className="muted">由站主和有权限的管理员统一设置，所有访客看到同一背景。</p>
+    <label>上传背景图片<input type="file" accept="image/jpeg,image/png,image/webp" onChange={select} disabled={busy} /></label><p className="muted">选择10MB以内图片，自动压缩后保存到本站。背景图片为公开内容。</p>
+    <form onSubmit={saveUrl}><label>直链类型<select value={kind} onChange={e => setKind(e.target.value)}><option value="image">图片</option><option value="video">动态视频</option></select></label><label>HTTPS 图片或视频直链<input type="url" value={url} onChange={e => setUrl(e.target.value)} required maxLength={2000} placeholder="https://…" /></label><p className="muted">视频使用可公开播放的 MP4/WebM 直链。请使用有权公开的素材，链接不要包含私密密钥。</p><button className="primary-button" disabled={busy}>发布全站背景</button></form>
+    <p className="muted">Wallpaper Engine 的图片可以上传；视频素材可托管后填写直链。Steam 创意工坊链接、场景包无法直接运行。</p>
+    {wallpaper.source && <><p>当前背景：{wallpaper.value.kind === 'video' ? '动态视频' : '图片'}</p><div className="background-preview">{wallpaper.value.kind === 'video' ? <video src={wallpaper.source} controls muted preload="metadata" /> : <img src={wallpaper.source} alt="当前全站背景预览" />}</div></>}
+    <button disabled={busy || !wallpaper.source} onClick={() => run(async () => { await wallpaper.save(null); setMessage('已恢复全站默认背景'); })}>恢复默认背景</button>
     {message && <p className="notice" role="status">{message}</p>}
   </section>;
 }

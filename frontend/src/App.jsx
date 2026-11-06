@@ -18,13 +18,14 @@ import { Pet } from './Pet';
 import { usePageTitle } from './usePageTitle';
 import { UserSettings } from './UserSettings';
 import { Avatar } from './Avatar';
-import { Wallpaper, WallpaperSettings } from './Wallpaper';
+import { Wallpaper } from './Wallpaper';
+import { usePresence } from './usePresence';
 import { useWallpaper } from './useWallpaper';
 import { BlogSidebar, BlogRightbar, ArticleArchive } from './BlogSidebars';
 import './BlogTheme.css';
 import { SettingsDock } from './SettingsDock';
 import { CursorExperience, SiteLoader } from './CursorExperience';
-const currentRoute = () => { const path = window.location.hash.slice(1) || '/'; return path === '/security' ? '/admin/security' : path; };
+const currentRoute = () => { const path = window.location.hash.slice(1) || '/'; return path === '/security' ? '/admin/security' : path === '/appearance' ? '/admin/appearance' : path; };
 
 const date = value => new Date(value).toLocaleString('zh-CN');
 export default function App() {
@@ -36,7 +37,8 @@ export default function App() {
   const [stats, setStats] = useState({ articles: 0, comments: 0, users: 0 });
   const [token, setToken] = useState(() => sessionStorage.getItem('blog-token') || '');
   const [user, setUser] = useState(null);
-  const wallpaper = useWallpaper(user?.id);
+  const wallpaper = useWallpaper();
+  usePresence(user);
   const [authMode, setAuthMode] = useState(null);
   const [route, setRoute] = useState(currentRoute);
   useEffect(() => {
@@ -58,7 +60,7 @@ export default function App() {
   const panel = useRef(null);
   const can = permission => user?.permissions?.includes(permission);
   const admin = can('article.manage');
-  const canManage = !user?.needsContactVerification && (user?.role === 'owner' || can('user.ban') || can('visitor.ban'));
+  const staff = !user?.needsContactVerification && ['owner', 'admin'].includes(user?.role);
   const roleNames = { guest: '访客', user: '用户', admin: '管理员', owner: '站主' };
   const [year] = useState(() => new Date().getFullYear());
   const detailId = detail?.id;
@@ -106,7 +108,7 @@ export default function App() {
     const data = new FormData(event.currentTarget);
     run(async () => {
       const payload = { username: data.get('username'), password: data.get('password'), contactType: 'email', contact: data.get('contact'), code: data.get('code'), verificationId: data.get('verificationId'), entryCode: data.get('entryCode') };
-      const path = data.get('ownerLogin') === 'yes' ? '/auth/owner-login' : authMode === 'bind' ? '/auth/contact' : authMode === 'reset' ? '/auth/password/reset' : '/auth/' + authMode;
+      const path = data.get('ownerLogin') === 'yes' ? '/auth/owner-login' : authMode === 'bind' ? '/auth/contact' : authMode === 'reset' ? '/auth/password/reset' : '/auth/' + (authMode === 'login' && (route.startsWith('/admin') || route === '/management') ? 'staff-login' : authMode);
       const result = await api(path, { method: 'POST', body: JSON.stringify(payload) });
       if (authMode === 'bind') { setUser(result); setAuthMode(null); setMessage('邮箱绑定成功，账号权限已生效'); await refresh(); return; }
       if (authMode === 'reset') { setAuthMode('login'); setMessage(result.message); return; }
@@ -131,10 +133,10 @@ export default function App() {
   };
   const visible = articles.filter(a => [a.title, a.summary, ...a.tags].join(' ').toLowerCase().includes(keyword.trim().toLowerCase()));
   if (route.startsWith('/admin') || route === '/management') return <div className={dark ? 'page dark' : 'page'}>
-    <AdminDashboard user={user} route={route} onLogin={() => showAuth('login')} />
+    <AdminDashboard user={user} route={route} wallpaper={wallpaper} onLogin={() => showAuth('login')} />
     <RadialNav route={route} />
     <SettingsDock key={route} {...settingsProps} />
-    {authMode && <AuthDialog key={authMode} mode={authMode} busy={busy} error={error} onClose={() => { setAuthMode(null); setError(''); }} onModeChange={showAuth} onSubmit={authenticate} />}
+    {authMode && <AuthDialog key={authMode} mode={authMode} staffOnly={route.startsWith('/admin') || route === '/management'} busy={busy} error={error} onClose={() => { setAuthMode(null); setError(''); }} onModeChange={showAuth} onSubmit={authenticate} />}
   </div>;
   return (
     <main className={(dark ? 'page dark' : 'page') + (wallpaper.source ? ' has-wallpaper' : '')}>
@@ -149,7 +151,7 @@ export default function App() {
             <a className="feature-nav" href="#/playground" onClick={closePanels}>游乐场</a>
             <a className="feature-nav" href="#/experience" onClick={closePanels}>动效体验</a>
             <a href="#/members" onClick={closePanels}>站员</a><a href="#/feedback" onClick={closePanels}>问题反馈</a>
-            {user ? <><span className="account"><Avatar id={user.id} name={user.username} version={user.avatarVersion} />{user.username} · {roleNames[user.role]}</span>{(canManage || admin || can('feedback.manage') || can('comment.moderate') || can('site.manage')) && <a className="admin-entry" href="#/admin" onClick={closePanels}>管理后台 ↗</a>}<button disabled={busy} onClick={() => run(async () => {
+            {user ? <><span className="account"><Avatar id={user.id} name={user.username} version={user.avatarVersion} />{user.username} · {roleNames[user.role]}</span>{staff && <a className="admin-entry" href="#/admin" onClick={closePanels}>管理后台 ↗</a>}<button disabled={busy} onClick={() => run(async () => {
               try { await api('/auth/logout', { token, method: 'POST' }); } catch (e) { if (e.status !== 401) throw e; }
               sessionStorage.removeItem('blog-token'); setToken(''); setUser(null); setMessage('已退出登录');
             })}>退出</button></> : <><button className="nav-login" disabled={busy} onClick={() => showAuth('login')}><Icon name="user" size={16} />登录</button><button className="nav-register" disabled={busy} onClick={() => showAuth('register')}>加入小站 <span>↗</span></button></>}
@@ -173,7 +175,6 @@ export default function App() {
         {route === '/members' && <Members user={user} />}
         {route === '/feedback' && <Feedback key={user?.id || 'guest'} user={user} onLogin={() => showAuth('login')} />}
         {Object.hasOwn(contentKinds, route.slice(1)) && <ContentPage key={route} kind={route.slice(1)} />}
-        {route === '/appearance' && <WallpaperSettings wallpaper={wallpaper} />}
         {(route === '/archive' || route.startsWith('/tags/')) && <ArticleArchive articles={articles} tag={route.startsWith('/tags/') ? (() => { try { return decodeURIComponent(route.slice(6)); } catch { return ''; } })() : ''} openArticle={openArticle} />}
         {home && <>
         {detail && <section className="article-card panel">

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Icon } from './Icon';
 import { api } from './api';
 
-export function AuthDialog({ mode, busy, error, onClose, onModeChange, onSubmit, initialEmail = '' }) {
+export function AuthDialog({ mode, busy, error, onClose, onModeChange, onSubmit, initialEmail = '', staffOnly = false }) {
   const dialog = useRef(null);
   const [visiblePassword, setVisiblePassword] = useState(false);
   const [validation, setValidation] = useState('');
@@ -93,7 +93,7 @@ export function AuthDialog({ mode, busy, error, onClose, onModeChange, onSubmit,
         <section className="auth-content">
           <button className="dialog-close" type="button" aria-label="关闭登录注册窗口" disabled={busy} onClick={onClose}><Icon name="close" /></button>
           <div className="auth-wordmark"><button type="button" className="mobile-owner-moon" aria-label="月亮" onClick={tapMoon}>◯</button><span>✦</span> 很高兴遇见你</div>
-          {!binding && <div className="auth-tabs" aria-label="选择账号操作">
+          {!binding && !staffOnly && <div className="auth-tabs" aria-label="选择账号操作">
             <button type="button" aria-pressed={mode === 'login'} className={mode === 'login' ? 'active' : ''} disabled={disabled} onClick={() => { if (mode !== 'login') onModeChange('login'); }}>登录</button>
             <button type="button" aria-pressed={register} className={register ? 'active' : ''} disabled={busy} onClick={() => { if (!register) onModeChange('register'); }}>注册</button>
           </div>}
@@ -123,7 +123,8 @@ export function AuthDialog({ mode, busy, error, onClose, onModeChange, onSubmit,
             {(validation || error) && <div className="auth-error" role="alert"><Icon name="info" size={16} /><span>{validation || error}</span></div>}
             <button className="auth-submit" type="submit" disabled={disabled || (needsCode && emailAvailable === false)}>{busy ? '请稍候…' : binding ? '验证并绑定' : reset ? '重置密码' : register ? '创建账号' : '登录小站'}<Icon name="arrow" size={18} /></button>
           </form>}
-          {!binding && <p className="auth-switch">{register || reset ? '已经有账号了？' : '第一次来到这里？'}<button type="button" disabled={disabled} onClick={() => onModeChange(register || reset ? 'login' : 'register')}>{register || reset ? '直接登录' : '注册一个账号'}<span> ↗</span></button>{mode === 'login' && <button type="button" disabled={disabled} onClick={() => onModeChange('reset')}>忘记密码</button>}</p>}
+          {!binding && !staffOnly && <p className="auth-switch">{register || reset ? '已经有账号了？' : '第一次来到这里？'}<button type="button" disabled={disabled} onClick={() => onModeChange(register || reset ? 'login' : 'register')}>{register || reset ? '直接登录' : '注册一个账号'}<span> ↗</span></button>{mode === 'login' && <button type="button" disabled={disabled} onClick={() => onModeChange('reset')}>忘记密码</button>}</p>}
+          {staffOnly && <p className="auth-description">管理后台仅向已验证的站主和管理员开放。{mode === 'login' && <button type="button" disabled={disabled} onClick={() => onModeChange('reset')}>忘记密码</button>}</p>}
           <div className="auth-footnote"><span className="tiny-dot" /> 文字留住时光，你留下故事。</div>
         </section>
       </div>

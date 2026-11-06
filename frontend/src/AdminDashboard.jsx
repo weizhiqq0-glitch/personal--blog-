@@ -6,6 +6,8 @@ import { LoginReports } from './LoginReports';
 import { feedbackStatuses } from './feedbackStatuses';
 import './AdminDashboard.css';
 import { OwnerReportNotice } from './OwnerReportNotice';
+import { AdminMembers } from './AdminMembers';
+import { WallpaperSettings } from './Wallpaper';
 import { ContentManager } from './ContentManager';
 
 function AdminArticles() {
@@ -53,20 +55,20 @@ function Overview() {
   useEffect(() => { api('/stats').then(setStats).catch(e => setError(e.message)); }, []);
   return <><h2>站点概览</h2><p className="muted">在这里管理小站的内容、成员与服务状态。</p>{error && <p className="notice error">{error}</p>}<div className="admin-metrics">{[['文章', stats?.articles], ['评论', stats?.comments], ['账号', stats?.users]].map(([label, value]) => <div key={label}><span>{label}</span><strong>{value ?? '—'}</strong></div>)}</div><section className="admin-welcome"><h3>前台与后台，各司其职。</h3><p>博客前台用于阅读和交流；这里用于管理。所有修改通过独立后端校验权限后写入数据库。</p><a href="#/">返回 mowu的小站 →</a></section></>;
 }
-export function AdminDashboard({ user, route, onLogin }) {
+export function AdminDashboard({ user, route, onLogin, wallpaper }) {
   const owner = user?.role === 'owner';
   const can = permission => user?.permissions?.includes(permission) && !user.needsContactVerification;
   const sections = [
     ['overview', '站点概览', true], ['articles', '文章管理', can('article.manage')], ['comments', '评论管理', can('comment.moderate')],
     ['users', '账号与访客', owner || can('user.ban') || can('visitor.ban')], ['feedback', '问题反馈', can('feedback.manage')], ['quota', '额度与用量', owner], ['security', '登录报备', owner],
-    ['content', '板块内容', can('site.manage')],
+    ['content', '板块内容', can('site.manage')], ['appearance', '全站背景', can('site.manage')], ['members', '成员列表', true],
   ];
-  const allowed = user && !user.needsContactVerification && sections.slice(1).some(([, , enabled]) => enabled);
+  const allowed = user && !user.needsContactVerification && ['owner', 'admin'].includes(user.role);
   const active = route === '/management' ? 'users' : route.split('/')[2] || 'overview';
   return <div className="admin-shell"><aside className="admin-sidebar"><a className="admin-logo" href="#/admin">✦ mowu<span>管理后台</span></a><nav aria-label="管理后台导航">{sections.filter(([, , enabled]) => enabled && allowed).map(([id, label]) => <a key={id} href={'#/admin/' + id} aria-current={active === id ? 'page' : undefined}>{label}<span>›</span></a>)}</nav><a className="admin-return" href="#/">← 返回博客前台</a></aside><div className="admin-workspace"><header className="admin-header"><span>控制台 / {sections.find(([id]) => id === active)?.[1] || '页面不存在'}</span><span>{user?.username || '尚未登录'}</span></header><main className="admin-content">
     {!allowed ? <><h1>管理后台</h1><p>{user ? '当前账号尚未验证，或没有后台管理权限。' : '请先登录站主或管理员账号。'}</p>{!user && <button className="primary-button" onClick={onLogin}>登录账号</button>}</> : !sections.some(([id, , enabled]) => id === active && enabled) ? <p>该页面不存在或当前账号没有权限。</p> : <>
       <OwnerReportNotice user={user} route={route} />
-      {active === 'overview' && <Overview />}{active === 'articles' && <AdminArticles />}{active === 'comments' && <AdminComments />}{active === 'users' && <ManagementPanel user={user} onClose={() => { window.location.hash = '/admin'; }} showBudget={false} />}{active === 'feedback' && <AdminFeedback />}{active === 'quota' && <><h2>额度与用量</h2><p className="muted">这里显示 EmailJS 邮件额度估算与防刷限制，并非现金余额。</p><EmailBudget /></>}{active === 'security' && <LoginReports />}{active === 'content' && <ContentManager />}
+      {active === 'members' && <AdminMembers />}{active === 'appearance' && <WallpaperSettings wallpaper={wallpaper} />}{active === 'overview' && <Overview />}{active === 'articles' && <AdminArticles />}{active === 'comments' && <AdminComments />}{active === 'users' && <ManagementPanel user={user} onClose={() => { window.location.hash = '/admin'; }} showBudget={false} />}{active === 'feedback' && <AdminFeedback />}{active === 'quota' && <><h2>额度与用量</h2><p className="muted">这里显示 EmailJS 邮件额度估算与防刷限制，并非现金余额。</p><EmailBudget /></>}{active === 'security' && <LoginReports />}{active === 'content' && <ContentManager />}
     </>}
   </main></div></div>;
 }

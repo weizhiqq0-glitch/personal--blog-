@@ -18,6 +18,7 @@ function createApi(options) {
   if (process.env.TRUST_PROXY_HOPS === '1') app.set('trust proxy', 1);
   const origins = (options.origins || process.env.CORS_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173').split(',').map(s => s.trim());
   app.use(cors({ exposedHeaders: ['X-Visitor-Token'], origin(origin, done) { done(null, !origin || origins.includes(origin)); } }));
+  app.use('/api/management/appearance', express.json({ limit: '1mb' }));
   app.use(express.json({ limit: '256kb' }));
   let ownerMigration;
   app.use(async (req, res, next) => {
@@ -68,6 +69,9 @@ function createApi(options) {
   });
   app.use('/api/auth', accounts.authRouter(authLimit, issueSession));
   app.use('/api/avatars', require('./avatars').createAvatars({ db, requireVerified: accounts.requireVerified, authLimit }));
+  app.use('/api/management', accounts.requireStaff);
+  const community = require('./community-admin').createCommunityAdmin({ db, requireVerified: accounts.requireVerified, requireStaff: accounts.requireStaff, requirePermission: accounts.requirePermission });
+  app.use('/api', community);
   app.use('/api/management', accounts.managementRouter(authLimit));
   const support = require('./support').createSupport({ db, requireVerified: accounts.requireVerified, requirePermission: accounts.requirePermission, authLimit });
   app.use('/api/feedback', support.publicRouter);

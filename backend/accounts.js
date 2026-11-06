@@ -53,10 +53,14 @@ function createAccounts({ db, passwords, emailSender, mailPolicy, ownerEntryHash
   }
   function requirePermission(permission) {
     return (req, res, next) => {
+      if (!['article.read', 'comment.read', 'comment.create'].includes(permission) && req.user && !['owner', 'admin'].includes(req.user.role)) return fail(res, 403, '管理功能仅向站主和管理员开放');
       if (effectivePermissions(req.user).includes(permission)) return next();
       if (!req.user) return fail(res, 401, '请先登录');
       return fail(res, 403, req.user.verified_at ? '当前账号没有此操作权限' : '请先完成邮箱验证码绑定');
     };
+  }
+  function requireStaff(req, res, next) {
+    return requireVerified(req, res, () => ['owner', 'admin'].includes(req.user.role) ? next() : fail(res, 403, '管理后台仅向站主和管理员开放'));
   }
   function ownerOnly(req, res, next) {
     if (req.user?.role !== 'owner' || !req.user.verified_at) return fail(res, 403, '只有已验证的站主可以管理角色和授权');
@@ -132,7 +136,7 @@ function createAccounts({ db, passwords, emailSender, mailPolicy, ownerEntryHash
         throw error;
       }
     });
-    router.post('/login', authLimit, async (req, res) => {
+    router.post(['/login', '/staff-login'], authLimit, async (req, res) => {
       const { username, password } = req.body || {};
       // Existing longer passwords can still authenticate; newly set passwords are 6–14.
       if (typeof username !== 'string' || typeof password !== 'string' || username.length > 32 || password.length > 128 || !password) return fail(res, 401, '用户名或密码错误');
@@ -140,6 +144,7 @@ function createAccounts({ db, passwords, emailSender, mailPolicy, ownerEntryHash
       const matches = await passwords.verifyPassword(password, user?.password_hash || '00000000000000000000000000000000:' + '00'.repeat(64));
       if (!user || !matches) return fail(res, 401, '用户名或密码错误');
       if (user.banned) return fail(res, 403, '此账号已被封禁，请联系站主');
+      if (req.path === '/staff-login' && (!['owner', 'admin'].includes(user.role) || !user.verified_at)) return fail(res, 403, '管理后台仅向已验证的站主和管理员开放');
       if (user.role === 'owner' && ownerEntryHash) return fail(res, 403, '请使用站主专属入口登录');
       await recordLogin(req, user);
       res.json(await issueSession(user));
@@ -278,6 +283,6 @@ function createAccounts({ db, passwords, emailSender, mailPolicy, ownerEntryHash
     await db.prepare('INSERT INTO visitors(key,first_seen,last_seen) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET last_seen=excluded.last_seen').run(req.visitorKey, now, now);
     await db.prepare('INSERT INTO page_visitors(key,first_seen,last_seen) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET last_seen=excluded.last_seen').run(req.visitorKey, now, now);
   }
-  return { recordVisit, checkRequest, requireVerified, requirePermission, authRouter, managementRouter };
+  return { recordVisit, checkRequest, requireVerified, requireStaff, requirePermission, authRouter, managementRouter };
 }
 module.exports = { createAccounts };

@@ -1,21 +1,21 @@
-import { useEffect, useRef, useState } from 'react';
-import { wallpaperStorage } from './wallpaperStorage';
-
-export function useWallpaper(userId) {
-  const key = userId ? 'user-' + userId : 'guest';
-  const [saved, setSaved] = useState(null);
-  const current = useRef(key);
+import { useEffect, useState } from 'react';
+import { api } from './api';
+const origin = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+export function useWallpaper() {
+  const [value, setValue] = useState(null);
   useEffect(() => {
-    current.current = key;
-    const state = { active: true };
-    wallpaperStorage('get', key).then(value => { if (state.active) setSaved({ key, value, source: value?.blob ? URL.createObjectURL(value.blob) : '' }); }).catch(() => { if (state.active) setSaved({ key, value: null }); });
-    return () => { state.active = false; };
-  }, [key]);
-  const value = saved?.key === key ? saved.value : null;
-  useEffect(() => () => { if (saved?.source) URL.revokeObjectURL(saved.source); }, [saved]);
+    let active = true;
+    function load() {
+      if (document.hidden) return;
+      api('/appearance').then(next => { if (active) setValue(next); }).catch(() => {});
+    }
+    load(); const timer = setInterval(load, 60000);
+    window.addEventListener('focus', load);
+    return () => { active = false; clearInterval(timer); window.removeEventListener('focus', load); };
+  }, []);
   async function save(next) {
-    await wallpaperStorage(next ? 'put' : 'delete', key, next);
-    if (current.current === key) setSaved({ key, value: next, source: next?.blob ? URL.createObjectURL(next.blob) : '' });
+    const result = await api('/management/appearance', { method: next ? 'PUT' : 'DELETE', ...(next ? { body: JSON.stringify(next) } : {}) });
+    setValue(result);
   }
-  return { value, source: value ? saved.source : '', save };
+  return { value, source: value?.source?.startsWith('/api/') ? origin + value.source : value?.source || '', save };
 }

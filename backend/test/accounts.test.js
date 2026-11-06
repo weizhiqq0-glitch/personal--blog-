@@ -117,7 +117,7 @@ test(engine + '：验证码、站主边界、授权与封禁', async t => {
       const article = { title: '权限测试', content: '保存正文', tags: [] };
       assert.equal((await call('/articles', 'POST', article, alice.token)).status, 403);
       assert.equal((await call('/management/users/' + alice.user.id, 'PATCH', { permissions: { 'article.manage': true } }, owner.token)).status, 200);
-      assert.equal((await call('/articles', 'POST', article, alice.token)).status, 201);
+      assert.equal((await call('/articles', 'POST', article, alice.token)).status, 403);
       assert.equal((await call('/management/users/' + manager.user.id, 'PATCH', { permissions: { 'article.manage': false } }, owner.token)).status, 200);
       assert.equal((await call('/articles', 'POST', article, manager.token)).status, 403);
       assert.equal((await call('/management/users/' + owner.user.id, 'PATCH', { role: 'user' }, owner.token)).status, 403);

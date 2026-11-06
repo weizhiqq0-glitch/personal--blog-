@@ -18,6 +18,7 @@ function effectivePermissions(user) {
   try { overrides = JSON.parse(user.permissions || '{}'); } catch { /* ignore invalid historic data */ }
   const result = new Set(defaults[user.role] || defaults.user);
   for (const key of Object.keys(PERMISSIONS)) {
+    if (user.role === 'user' && !defaults.user.includes(key)) continue;
     if (overrides[key] === true) result.add(key);
     if (overrides[key] === false) result.delete(key);
   }
