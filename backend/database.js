@@ -1,11 +1,8 @@
 const { DatabaseSync } = require('node:sqlite');
 const { mkdirSync } = require('node:fs');
 const path = require('node:path');
-const { randomBytes, scrypt, timingSafeEqual, createHash } = require('node:crypto');
-const { promisify } = require('node:util');
-const derive = promisify(scrypt);
 function openDatabase(file = process.env.DB_PATH || path.join(__dirname, 'data', 'blog.sqlite')) {
-  if (process.env.DATABASE_URL && arguments.length === 0) return require('./postgres').openPostgres(process.env.DATABASE_URL);
+  if (process.env.DATABASE_URL && arguments.length === 0) return require('./postgres-node').openPostgres(process.env.DATABASE_URL);
   if (file !== ':memory:') mkdirSync(path.dirname(path.resolve(file)), { recursive: true });
   const db = new DatabaseSync(file);
   db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;');
@@ -32,21 +29,7 @@ function openDatabase(file = process.env.DB_PATH || path.join(__dirname, 'data',
     );
     CREATE INDEX IF NOT EXISTS comments_article ON comments(article_id);
   `);
+  require('./account-schema').migrateSqliteAccounts(db);
   return db;
 }
-async function hashPassword(password) {
-  const salt = randomBytes(16).toString('hex');
-  return salt + ':' + (await derive(password, salt, 64)).toString('hex');
-}
-async function verifyPassword(password, stored) {
-  const [salt, hash] = stored.split(':');
-  const actual = await derive(password, salt, 64);
-  const expected = Buffer.from(hash, 'hex');
-  return actual.length === expected.length && timingSafeEqual(actual, expected);
-}
-function tokenHash(token) { return createHash('sha256').update(token).digest('hex'); }
-function validateCredentials(username, password) {
-  return typeof username === 'string' && /^[\p{L}\p{N}_-]{2,32}$/u.test(username)
-    && typeof password === 'string' && password.length >= 10 && password.length <= 128;
-}
-module.exports = { openDatabase, hashPassword, verifyPassword, tokenHash, validateCredentials };
+module.exports = { openDatabase, ...require('./security') };

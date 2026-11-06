@@ -12,3 +12,8 @@ backend/data/
 *.sqlite
 *.sqlite-wal
 *.sqlite-shm
+
+# Cloudflare local state and private development bindings
+.wrangler/
+.dev.vars
+.dev.vars.*

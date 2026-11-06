@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from './api';
 import { AuthDialog } from './AuthDialog';
 import { Icon } from './Icon';
+import { ManagementPanel } from './ManagementPanel';
 import './App.css';
 
 const date = value => new Date(value).toLocaleString('zh-CN');
@@ -14,6 +15,7 @@ export default function App() {
   const [token, setToken] = useState(() => sessionStorage.getItem('blog-token') || '');
   const [user, setUser] = useState(null);
   const [authMode, setAuthMode] = useState(null);
+  const [management, setManagement] = useState(false);
   const [detail, setDetail] = useState(null);
   const [comments, setComments] = useState([]);
   const [comment, setComment] = useState('');
@@ -26,7 +28,10 @@ export default function App() {
   const [error, setError] = useState('');
   const lock = useRef(false);
   const panel = useRef(null);
-  const admin = user?.role === 'admin';
+  const can = permission => user?.permissions?.includes(permission);
+  const admin = can('article.manage');
+  const canManage = !user?.needsContactVerification && (user?.role === 'owner' || can('user.ban') || can('visitor.ban'));
+  const roleNames = { guest: '访客', user: '用户', admin: '管理员', owner: '站主' };
   const [year] = useState(() => new Date().getFullYear());
   const detailId = detail?.id;
 
@@ -60,7 +65,7 @@ export default function App() {
     try { await action(); } catch (e) { setError(e.message); }
     finally { lock.current = false; setBusy(false); }
   }
-  function closePanels() { setDetail(null); setEditing(false); setAuthMode(null); setComment(''); }
+  function closePanels() { setDetail(null); setEditing(false); setManagement(false); setAuthMode(null); setComment(''); }
   async function openArticle(id) {
     await run(async () => {
       const [article, list] = await Promise.all([api('/articles/' + id), api('/articles/' + id + '/comments')]);
@@ -77,9 +82,13 @@ export default function App() {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
     run(async () => {
-      const result = await api('/auth/' + authMode, { method: 'POST', body: JSON.stringify({ username: data.get('username'), password: data.get('password') }) });
+      const payload = { username: data.get('username'), password: data.get('password'), contactType: 'email', contact: data.get('contact'), code: data.get('code'), verificationId: data.get('verificationId') };
+      const path = authMode === 'bind' ? '/auth/contact' : authMode === 'reset' ? '/auth/password/reset' : '/auth/' + authMode;
+      const result = await api(path, { method: 'POST', body: JSON.stringify(payload) });
+      if (authMode === 'bind') { setUser(result); setAuthMode(null); setMessage('邮箱绑定成功，账号权限已生效'); await refresh(); return; }
+      if (authMode === 'reset') { setAuthMode('login'); setMessage(result.message); return; }
       sessionStorage.setItem('blog-token', result.token); setToken(result.token); setUser(result.user);
-      setAuthMode(null); setMessage('登录成功，欢迎 ' + result.user.username); await refresh();
+      setAuthMode(result.user.needsContactVerification ? 'bind' : null); setMessage('登录成功，欢迎 ' + result.user.username); await refresh();
     });
   }
   function saveArticle(event) {
@@ -115,22 +124,24 @@ export default function App() {
           <a className="brand" href="#" onClick={closePanels}><span className="brand-mark">✦</span><span>我的小站</span></a>
           <nav>
             <a href="#articles" onClick={closePanels}>文章</a>
-            {user ? <><span className="account">{user.username} · {admin ? '管理员' : '用户'}</span>{admin && <button disabled={busy} onClick={() => writeArticle()}>写文章</button>}<button disabled={busy} onClick={() => run(async () => {
+            {user ? <><span className="account">{user.username} · {roleNames[user.role]}</span>{admin && <button disabled={busy} onClick={() => writeArticle()}>写文章</button>}{canManage && <button disabled={busy} onClick={() => { closePanels(); setManagement(true); }}>账号管理</button>}<button disabled={busy} onClick={() => run(async () => {
               try { await api('/auth/logout', { token, method: 'POST' }); } catch (e) { if (e.status !== 401) throw e; }
-              sessionStorage.removeItem('blog-token'); setToken(''); setUser(null); setEditing(false); setMessage('已退出登录');
+              sessionStorage.removeItem('blog-token'); setToken(''); setUser(null); setEditing(false); setManagement(false); setMessage('已退出登录');
             })}>退出</button></> : <><button className="nav-login" disabled={busy} onClick={() => showAuth('login')}><Icon name="user" size={16} />登录</button><button className="nav-register" disabled={busy} onClick={() => showAuth('register')}>加入小站 <span>↗</span></button></>}
             <button className="icon-button" aria-label={dark ? '切换日间模式' : '切换夜间模式'} onClick={() => setDark(!dark)}><Icon name={dark ? 'sun' : 'moon'} /></button>
           </nav>
         </header>
         {error && !authMode && <div className="notice error" role="alert">{error}<button disabled={busy} onClick={() => run(refresh)}>重新连接</button></div>}
         {message && <div className="notice" role="status">{message}</div>}
+        {user?.needsContactVerification && <div className="notice">账号需要先验证邮箱才能启用操作权限。<button onClick={() => showAuth('bind')}>绑定邮箱</button></div>}
         <section className="hero-card">
           <div className="hero-copy"><p className="eyebrow"><span className="tiny-dot" /> 一隅小站 · 一点日常</p><h1>淡淡的，<br />就会<span className="heading-accent">顺顺的。</span></h1><p className="intro">收集生活的细碎，记录成长的轨迹。<br />愿这里的文字，也能陪你度过一小段时光。</p><a className="primary-button" href="#articles" onClick={closePanels}>翻开我的日常 <Icon name="arrow" size={17} /></a></div>
           <div className="hero-visual" aria-hidden="true"><div className="visual-label"><span className="tiny-dot" /> 此刻，刚刚好</div><div className="hero-sun" /><div className="hero-mountain mountain-back" /><div className="hero-mountain mountain-front" /><div className="hero-visual-caption"><span>把日子写成诗</span><span>✦</span></div></div>
         </section>
         <section className="stats-row"><div><strong>{stats.articles}</strong><span>文章</span></div><div><strong>{stats.comments}</strong><span>评论</span></div><div><strong>{stats.users}</strong><span>成员</span></div><div><strong>2026</strong><span>开始写作</span></div></section>
         <div ref={panel} className="panel-anchor" />
-        {authMode && <AuthDialog key={authMode} mode={authMode} busy={busy} error={error} onClose={() => { setAuthMode(null); setError(''); }} onModeChange={showAuth} onSubmit={authenticate} />}
+        {authMode && <AuthDialog key={authMode} mode={authMode} busy={busy} error={error} onClose={() => { setAuthMode(null); setError(''); }} onModeChange={showAuth} onSubmit={authenticate} initialEmail={authMode === 'bind' ? user?.contact?.value || '' : ''} />}
+        {management && canManage && <ManagementPanel user={user} onClose={() => setManagement(false)} />}
         {editing && admin && <section className="article-card panel"><h2>{editId ? '编辑文章' : '发布新文章'}</h2><form onSubmit={saveArticle}>
           <label>标题<input value={draft.title} onChange={e => setDraft({ ...draft, title: e.target.value })} required maxLength={120} /></label>
           <label>标签<input value={draft.tags} onChange={e => setDraft({ ...draft, tags: e.target.value })} placeholder="用逗号分隔，最多8个" /></label>
@@ -143,9 +154,9 @@ export default function App() {
           <div className="article-body">{detail.content}</div>
           {admin && <div className="actions"><button disabled={busy} onClick={() => writeArticle(detail)}>编辑文章</button><button className="danger" disabled={busy} onClick={removeArticle}>删除文章</button></div>}
           <section className="comment-section"><h3>评论 · {comments.length}</h3>
-            {user ? <form onSubmit={postComment}><label>发表你的评论<textarea value={comment} onChange={e => setComment(e.target.value)} maxLength={2000} required placeholder="友善交流，分享你的想法" /></label><button className="primary-button" disabled={busy}>发表评论</button></form> : <p className="muted">登录后即可参与讨论。<button onClick={() => showAuth('login')}>去登录</button></p>}
+            {can('comment.create') ? <form onSubmit={postComment}><label>发表你的评论<textarea value={comment} onChange={e => setComment(e.target.value)} maxLength={2000} required placeholder="友善交流，分享你的想法" /></label><button className="primary-button" disabled={busy}>发表评论</button></form> : <p className="muted">{user ? '请完成邮箱绑定；若已绑定，则当前账号暂未开放评论权限。' : '登录后即可参与讨论。'}{!user && <button onClick={() => showAuth('login')}>去登录</button>}</p>}
             {!comments.length && <p className="muted">还没有评论，来分享第一个想法吧。</p>}
-            {comments.map(c => <article key={c.id} className="comment"><div className="comment-heading"><strong>{c.username}{c.role === 'admin' ? ' · 管理员' : ''}</strong><span>{date(c.created_at)}</span></div><p>{c.content}</p>{(admin || c.user_id === user?.id) && <button className="read-button danger" disabled={busy} onClick={() => removeComment(c.id)}>删除评论</button>}</article>)}
+            {comments.map(c => <article key={c.id} className="comment"><div className="comment-heading"><strong>{c.username}{['owner', 'admin'].includes(c.role) ? ' · ' + roleNames[c.role] : ''}</strong><span>{date(c.created_at)}</span></div><p>{c.content}</p>{(can('comment.moderate') || c.user_id === user?.id) && <button className="read-button danger" disabled={busy} onClick={() => removeComment(c.id)}>删除评论</button>}</article>)}
           </section>
         </section>}
         <section id="articles"><div className="section-heading"><div><p className="eyebrow">最新记录</p><h2>最近写了什么</h2></div><label className="search"><Icon name="search" size={18} /><input aria-label="搜索文章或标签" value={keyword} onChange={e => setKeyword(e.target.value)} placeholder="搜索文章或标签" /></label></div>

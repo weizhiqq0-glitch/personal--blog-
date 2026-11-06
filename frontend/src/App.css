@@ -89,6 +89,19 @@ footer { text-align: center; font-size: 10px; letter-spacing: 1px; color: var(--
 /* 文章编辑、阅读和评论 */
 .panel { margin-bottom: 32px; padding: 32px; overflow-wrap: anywhere; }
 .panel-anchor { scroll-margin-top: 24px; }
+.verification-row { display: flex; align-items: stretch; gap: 10px; }
+.verification-row .auth-input { min-width: 0; flex: 1; }
+.verification-row > button { white-space: nowrap; padding: 8px 12px; border: 1px solid var(--line); border-radius: 11px; color: inherit; background: transparent; font-size: 12px; }
+.management-row { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; padding: 20px 0; border-bottom: 1px solid var(--line); }
+.management-row > div { flex: 1; min-width: 180px; }
+.management-row p { font-size: 12px; margin: 8px 0; overflow-wrap: anywhere; }
+.management-row > button { padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; background: transparent; color: inherit; }
+.role-badge { display: inline-block; padding: 4px 8px; border-radius: 7px; background: #a593c222; margin-left: 10px; font-size: 11px; }
+.permission-editor { flex-basis: 100%; font-size: 13px; }
+.permission-editor summary { cursor: pointer; color: var(--accent); }
+.permission-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
+.permission-editor select { border: 1px solid var(--line); border-radius: 8px; padding: 9px; background: var(--card); color: inherit; }
+.management-panel h3 { margin-top: 28px; }
 .panel h2 { margin: 16px 0; }
 .panel form { display: grid; gap: 18px; margin: 24px 0; }
 .panel label { display: grid; gap: 8px; font-size: 13px; }

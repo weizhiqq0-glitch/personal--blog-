@@ -13,8 +13,11 @@ for (const engine of ['sqlite', 'postgres']) {
 test(engine + '：账号、文章、评论、后端权限和数据库持久化', async t => {
   const folder = mkdtempSync(path.join(os.tmpdir(), 'blog-test-'));
   const dbPath = path.join(folder, 'test.sqlite');
+  const messages = new Map();
+  const emailSender = { available: true, async send({to, code}) { messages.set(to, code); } };
+  let registration = 0;
   async function makeApp() {
-    if (engine === 'sqlite') return createApp({ dbPath });
+    if (engine === 'sqlite') return createApp({ dbPath, emailSender });
     // Execute real PostgreSQL SQL in an isolated WASM engine, not query mocks.
     const pg = new PGlite(path.join(folder, 'pg'));
     const db = createPostgresDatabase({
@@ -22,13 +25,18 @@ test(engine + '：账号、文章、评论、后端权限和数据库持久化',
       async end() { await pg.close(); },
     });
     await db.ready;
-    return createApp({ database: db });
+    return createApp({ database: db, emailSender });
   }
   let app = await makeApp();
   let server = app.listen(0, '127.0.0.1');
   await once(server, 'listening');
   let base = 'http://127.0.0.1:' + server.address().port + '/api';
   const call = async (url, method = 'GET', body, token) => {
+    if (url === '/auth/register' && body) {
+      const contact = 'fixture' + ++registration + '@example.com';
+      const proof = await call('/auth/verification-code', 'POST', { contact, purpose: 'register' });
+      body = { ...body, contact, code: messages.get(contact), verificationId: proof.data.verificationId };
+    }
     const res = await fetch(base + url, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     return { status: res.status, data: res.status === 204 ? null : await res.json() };
   };
@@ -36,19 +44,19 @@ test(engine + '：账号、文章、评论、后端权限和数据库持久化',
   try {
     await t.test('注册、重复账号、密码哈希与角色不能伪造', async () => {
       assert.equal((await call('/auth/register', 'POST', { username: 'tiny', password: 'x' })).status, 400);
-      const result = await call('/auth/register', 'POST', { username: 'alice', password: 'Alice-Password-123', role: 'admin' });
+      const result = await call('/auth/register', 'POST', { username: 'alice', password: 'Alice123', role: 'admin' });
       assert.equal(result.status, 201); assert.equal(result.data.user.role, 'user'); alice = result.data.token;
-      assert.equal((await call('/auth/register', 'POST', { username: 'ALICE', password: 'Other-Password-123' })).status, 409);
+      assert.equal((await call('/auth/register', 'POST', { username: 'ALICE', password: 'Other123' })).status, 409);
       const saved = await app.locals.db.prepare('SELECT password_hash FROM users WHERE username=?').get('alice');
-      assert.notEqual(saved.password_hash, 'Alice-Password-123');
-      bob = (await call('/auth/register', 'POST', { username: 'bob', password: 'Bob-Password-123' })).data.token;
-      await app.locals.db.prepare("INSERT INTO users(username,password_hash,role) VALUES (?,?,'admin')").run('owner', await hashPassword('Admin-Password-123'));
+      assert.notEqual(saved.password_hash, 'Alice123');
+      bob = (await call('/auth/register', 'POST', { username: 'bob', password: 'Bob123' })).data.token;
+      await app.locals.db.prepare("INSERT INTO users(username,password_hash,role,verified_at) VALUES (?,?,'admin','2026-11-01T00:00:00Z')").run('owner', await hashPassword('Admin123'));
     });
     await t.test('登录与过期会话校验', async () => {
-      assert.equal((await call('/auth/login', 'POST', { username: 'alice', password: 'Wrong-Password-123' })).status, 401);
-      assert.equal((await call('/auth/login', 'POST', { username: 'ALICE', password: 'Alice-Password-123' })).status, 200);
-      assert.equal((await call('/auth/login', 'POST', { username: "' OR 1=1 --", password: 'Wrong-Password-123' })).status, 401);
-      admin = (await call('/auth/login', 'POST', { username: 'owner', password: 'Admin-Password-123' })).data.token;
+      assert.equal((await call('/auth/login', 'POST', { username: 'alice', password: 'Wrong123' })).status, 401);
+      assert.equal((await call('/auth/login', 'POST', { username: 'ALICE', password: 'Alice123' })).status, 200);
+      assert.equal((await call('/auth/login', 'POST', { username: "' OR 1=1 --", password: 'Wrong123' })).status, 401);
+      admin = (await call('/auth/login', 'POST', { username: 'owner', password: 'Admin123' })).data.token;
       assert.equal((await call('/auth/me', 'GET', undefined, admin)).data.role, 'admin');
       assert.equal((await call('/auth/me', 'GET', undefined, 'forged')).status, 401);
     });

@@ -1,16 +1,21 @@
 # 我的个人博客 · 使用说明
 
+新版账号规则与配置以 [账号权限说明.md](账号权限说明.md) 为准：新密码6—14位，邮箱验证码绑定，访客/用户/管理员/站主四种身份；管理员由站主在网页授权。旧账号保留，需补绑邮箱后才能启用操作权限。
+
 ## 已完成功能
 
 这是前后端分离的博客基础版。React 负责网页，Express 提供 REST API；本机默认使用 SQLite，免费线上部署使用 Neon PostgreSQL，保存用户、文章、评论和登录会话。
 
-免费上线请按 [免费部署说明.md](免费部署说明.md) 操作：GitHub Pages 托管前端、Render Free 运行后端、Neon 保存数据库。根目录 render.yaml 已提供后端部署配置。
+当前不绑卡的免费上线方案请按 [Cloudflare免费部署说明.md](Cloudflare免费部署说明.md) 操作：GitHub Pages 托管前端、Cloudflare Workers 运行后端、Neon 保存数据库。Windows 双击 deploy-free-backend.cmd 引导部署。
+
+原来的 Render 方案见 [免费部署说明.md](免费部署说明.md)，但实际注册部署时可能要求银行卡验证，因此目前优先使用 Cloudflare。
 
 | 身份 | 可以做什么 |
 | --- | --- |
 | 访客 | 浏览、搜索文章、阅读评论、注册、登录 |
 | 普通用户 | 访客功能、发表评论、删除自己的评论、退出 |
-| 管理员 | 用户功能、发布/编辑/删除文章、删除任意评论 |
+| 管理员 | 用户功能、管理文章和评论、封禁普通用户及浏览器访客 |
+| 站主 | 全部能力、授权或限制其他账号权限、管理用户与管理员身份 |
 
 前端按钮根据身份显示，后端会再次校验权限。注册接口不能指定管理员角色。没有公共默认管理员密码。
 
@@ -42,7 +47,7 @@ npm --prefix frontend run dev
 
 手动启动时确保 frontend/.env.local 中 BLOG_BACKEND_URL 与后端实际端口一致。否则在 frontend/.env.local 中写 BLOG_BACKEND_URL=http://127.0.0.1:3000。
 
-## 二、创建你自己的管理员
+## 二、创建你自己的站主账号
 
 打开项目目录中的 PowerShell，运行：
 
@@ -50,11 +55,11 @@ npm --prefix frontend run dev
 npm --prefix backend run admin
 ```
 
-按提示输入用户名、密码并确认。密码输入不会显示。用户名2—32位，可用中文、字母、数字、下划线或短横线；密码10—128位。此命令只在你自己的电脑/服务器上运行，不会通过公开注册产生管理员，也不会覆盖已有用户。
+按提示输入用户名、预留邮箱、6—14位密码并确认。密码输入不会显示。用户名2—32位，可用中文、字母、数字、下划线或短横线。此命令只在自己的电脑/服务器运行，创建或认领唯一站主，不提供公开提权接口。
 
-回到网页，点击“登录”，使用刚创建的管理员账号登录。右上角会显示“管理员”和“写文章”。普通访客通过“注册”创建的是普通用户。
+先按 [账号权限说明.md](账号权限说明.md) 配置真实发信服务，再登录站主账号，收取验证码并验证预留邮箱，激活站主权限。普通注册仅创建用户；管理员由站主在网页“账号管理”里授权。旧账号补绑邮箱前仅保留基础浏览权限。
 
-管理员密码由你自己输入，不需要发给任何人。如果忘记管理员密码，可用新的用户名再次运行本机管理员创建命令。
+忘记密码可在登录弹窗点击“忘记密码”，通过绑定邮箱验证后重设密码，旧会话会失效。不要通过重复创建账号找回站主。
 
 ## 三、发表文章与评论
 
@@ -64,7 +69,7 @@ npm --prefix backend run admin
 4. 评论作者能删除自己的评论，管理员能删除任意评论。
 5. 删除文章会连同它的评论一起删除，页面会先要求确认。
 
-当前正文和评论按纯文本显示，保留换行，不执行 HTML。暂未提供图片上传、草稿、评论审核、找回密码、邮件验证或富文本编辑器。登录会话有效期7天，当前浏览器标签页关闭后需重新登录；退出会使该会话立即失效。
+当前正文和评论按纯文本显示，保留换行，不执行 HTML。已支持邮箱验证和邮箱找回密码；暂未提供图片上传、草稿、评论审核或富文本编辑器。登录会话有效期7天，当前浏览器标签页关闭后需重新登录；退出会使该会话立即失效。
 
 ## 四、每个文件是干什么的
 
@@ -78,9 +83,12 @@ npm --prefix backend run admin
 | frontend/vite.config.js | 开发代理、构建资源路径 |
 | frontend/.env.example | 前端配置示例，可复制为 .env.local |
 | backend/server.js | 读取环境配置并启动后端 |
-| backend/app.js | REST API、输入校验、登录与管理员权限检查 |
+| backend/app.js / backend/api.js | 本机入口及共用文章、评论 REST API |
+| backend/accounts.js / backend/permissions.js | 邮箱账号、角色、授权、封禁与后端权限检查 |
+| backend/email.js / backend/verification.js | 真实邮件发送适配和验证码有效期、尝试次数控制 |
+| frontend/src/ManagementPanel.jsx | 站主和管理员账号管理面板 |
 | backend/database.js | 建表、数据库连接、密码哈希和令牌哈希 |
-| backend/create-admin.js | 本机交互式创建管理员 |
+| backend/create-admin.js | 交互式创建或认领唯一站主（保留旧文件名） |
 | backend/data/blog.sqlite | 实际数据库，首次启动自动生成，不上传 GitHub |
 | backend/.env.example | 后端配置示例，可复制为 .env |
 | backend/test/blog.test.js | 注册、权限、文章、评论和持久化集成测试 |
@@ -89,14 +97,19 @@ npm --prefix backend run admin
 | .github/workflows/pages.yml | GitHub Actions 自动构建发布前端 |
 | package.json / package-lock.json | 子项目运行命令和依赖版本 |
 
-密码使用随机盐和 scrypt 派生后保存，数据库不保存明文密码。随机会话令牌只在登录时返回，后端数据库保存的是令牌摘要。
+本机密码使用随机盐和 scrypt；Workers 使用数据库 pgcrypto 的 bcrypt，并先对完整密码做 SHA-256。数据库不保存明文密码。随机会话令牌只在登录时返回，后端数据库保存的是令牌摘要。
 
 ## 五、后端接口
 
 | 接口 | 用途/权限 |
 | --- | --- |
 | GET /api/health | 健康检查 |
-| POST /api/auth/register | 注册普通用户并登录 |
+| POST /api/auth/verification-code | 发送邮箱验证码 |
+| POST /api/auth/register | 验证邮箱并注册普通用户 |
+| POST /api/auth/contact | 旧账号验证绑定邮箱 |
+| POST /api/auth/password/reset | 邮箱验证后重置密码 |
+| GET /api/management/users | 有管理权限的账号查询成员 |
+| PATCH /api/management/users/:id | 仅站主调整角色与具体权限 |
 | POST /api/auth/login | 登录 |
 | GET /api/auth/me | 当前登录用户 |
 | POST /api/auth/logout | 注销当前会话 |
@@ -124,7 +137,7 @@ GitHub 保存源代码。GitHub Pages 只能发布前端，不能运行本项目
 2. 参考 backend/.env.example 配置 PORT、HOST=0.0.0.0、DB_PATH（持久磁盘绝对路径）。
 3. CORS_ORIGINS 设置成 https://weizhiqq0-glitch.github.io（只包含协议和主机，不能带仓库路径）。多个站点以逗号分隔。
 4. 通过 npm start 运行，并使用平台或反向代理提供 HTTPS。
-5. 在同一 DB_PATH 配置下运行 npm run admin 创建正式管理员。本机数据库不会自动同步到服务器。
+5. 在同一 DB_PATH 配置下运行 npm run admin 创建或认领站主，并配置邮件服务、验证预留邮箱。本机数据库不会自动同步到服务器。
 6. 一个 SQLite 文件由单个后端实例管理。备份和搬家时先停止后端，再复制整个 backend/data 目录；若设置了 DB_PATH，则备份对应数据库及相关文件。
 
 部署 GitHub Pages 前端时：

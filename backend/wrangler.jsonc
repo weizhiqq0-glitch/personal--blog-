@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "personal-blog-api",
+  "main": "worker.mjs",
+  "tsconfig": "tsconfig.worker.json",
+  "compatibility_date": "2026-11-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "vars": {
+    "EMAIL_PROVIDER": "emailjs",
+    "CORS_ORIGINS": "https://weizhiqq0-glitch.github.io"
+  }
+}
