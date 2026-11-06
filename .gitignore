@@ -7,3 +7,8 @@ dist/
 
 # Local Windows shortcuts contain machine-specific paths
 *.lnk
+# Local database and private configuration
+backend/data/
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm

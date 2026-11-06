@@ -4,7 +4,7 @@ $projectRoot = Split-Path -Parent $PSScriptRoot
 function Test-BlogEndpoint([string]$Url, [string]$Kind) {
     try {
         $response = Invoke-WebRequest -Uri $Url -UseBasicParsing -TimeoutSec 2
-        if ($Kind -eq 'backend') { return (($response.Content | ConvertFrom-Json).message -eq '博客后端运行正常') }
+        if ($Kind -eq 'backend') { return (($response.Content | ConvertFrom-Json).version -eq 2) }
         return ($response.Content -match '/@vite/client')
     } catch { return $false }
 }
@@ -31,6 +31,11 @@ try {
     }
     Write-Host "Backend: http://127.0.0.1:$backendPort/api/health"
     if ($CheckOnly) { Write-Host '检查通过：目录、依赖、npm 和端口正常。'; exit 0 }
+    # 更新本机代理目标；Vite 发现 .env.local 修改后会自动重启。
+    $envFile = Join-Path $projectRoot 'frontend\.env.local'
+    $existing = if (Test-Path $envFile) { @(Get-Content -LiteralPath $envFile | Where-Object { $_ -notmatch '^BLOG_BACKEND_URL=' }) } else { @() }
+    $newLines = @($existing) + "BLOG_BACKEND_URL=http://127.0.0.1:$backendPort"
+    [IO.File]::WriteAllText($envFile, ($newLines -join [Environment]::NewLine) + [Environment]::NewLine, [Text.UTF8Encoding]::new($false))
     if (-not $backReady) {
         Start-Process -FilePath $env:ComSpec -WorkingDirectory (Join-Path $projectRoot 'backend') -ArgumentList "/d /k `"title Blog Backend & set PORT=$backendPort& npm.cmd run dev`""
     }

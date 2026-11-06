@@ -1,8 +1,15 @@
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv } from 'vite'
 
-export default defineConfig({
-  plugins: [react()],
-  // 使用相对资源路径，兼容 GitHub Pages 的仓库子目录。
-  base: './',
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), 'BLOG_')
+  return {
+    plugins: [react()],
+    base: './',
+    server: {
+      proxy: {
+        '/api': { target: process.env.BLOG_BACKEND_URL || env.BLOG_BACKEND_URL || 'http://127.0.0.1:3000', changeOrigin: true },
+      },
+    },
+  }
 })
