@@ -239,3 +239,9 @@ footer { text-align: center; font-size: 10px; letter-spacing: 1px; color: var(--
 @media(max-width:700px) { .topbar { flex-wrap:wrap; gap:14px; } .topbar nav { flex-basis:100%; min-width:0; justify-content:flex-start; flex-wrap:wrap; gap:10px; } .topbar nav>* { flex-shrink:0; white-space:nowrap; } .topbar nav>a.feature-nav { display:inline-flex; } .topbar .account { text-align:left; } }
 @media(max-width:700px) { .topbar nav>a { display:inline-flex; font-size:11px; } }
 .settings-page h1 { font-size:34px; }
+.settings-dock { position: fixed; right: max(12px, env(safe-area-inset-right)); top: 44%; z-index: 45; }
+.settings-dock a { display: flex; flex-direction: column; align-items: center; gap: 9px; width: 50px; padding: 15px 5px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); color: var(--muted); box-shadow: 0 6px 24px #15102312; backdrop-filter: blur(14px); text-decoration: none; font-size: 11px; line-height: 1.7; transition: color .2s, transform .2s; }
+.settings-dock a:hover, .settings-dock a[aria-current="page"] { color: var(--accent); border-color: var(--accent); }
+.settings-dock a:hover { transform: translateY(-2px); }
+@media(max-width:1280px) { .layout { width: calc(100% - 110px); margin-left: 24px; margin-right: 86px; } }
+@media(max-width:700px) { .layout { width: calc(100% - 80px); margin-left:14px; margin-right:66px; }.settings-dock { right:8px; }.settings-dock a { width:44px; padding:12px 3px; border-radius:14px; }.section-heading { flex-wrap:wrap; gap:14px; } }

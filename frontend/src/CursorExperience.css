@@ -13,7 +13,7 @@
 .cursor-progress { margin: 30px auto; width: 140px; height: 3px; background: #ffffff14; overflow: hidden; border-radius: 5px; }
 .cursor-progress::after { content: ''; display: block; width: 60%; height: 100%; background: linear-gradient(90deg,#9d9bff,#ff8baa); animation: cursor-progress 1s infinite alternate ease-in-out; }
 .cursor-orbit { position: absolute; left: var(--pointer-x); top: var(--pointer-y); z-index: 3; pointer-events: none; }
-.cursor-orbit > span { position: absolute; width: 24px; height: 30px; filter: drop-shadow(0 0 6px var(--color)); animation: cursor-orbit 2.8s linear infinite; }
+.cursor-orbit > span { position: absolute; width: 24px; height: 30px; margin: -15px 0 0 -12px; transform-origin: 12px 15px; will-change: transform; filter: drop-shadow(0 0 6px var(--color)); }
 .cursor-orbit svg, .selection-cursor svg { width: 24px; height: 30px; }
 .is-ready .cursor-orbit { display: none; }
 .cursor-reveal-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 22px; position: relative; margin-top: 92px; }
@@ -36,7 +36,6 @@
 @keyframes real-content-reveal { from { opacity: 0; transform: translateY(12px); outline: 1px solid #be9bf8; outline-offset: 5px; } 60% { outline-color: #ff91ba; } to { opacity: 1; transform: translateY(0); outline-color: transparent; } }
 @keyframes real-text-reveal { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0); } }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-@keyframes cursor-orbit { from { transform: rotate(var(--angle)) translateX(85px) rotate(calc(-1 * var(--angle))); } to { transform: rotate(calc(var(--angle) + 360deg)) translateX(85px) rotate(calc(-1 * var(--angle) - 360deg)); } }
 @keyframes cursor-progress { from { transform: translateX(-100%); } to { transform: translateX(170%); } }
 @keyframes cursor-card { from { transform: translateY(12px); clip-path: inset(0 100% 0 0); } to { transform: translateY(0); clip-path: inset(-40px); } }
 @keyframes cursor-blink { 50% { opacity: 0; } }

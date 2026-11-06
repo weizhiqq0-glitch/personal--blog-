@@ -6,6 +6,43 @@ const colors = ['#ff719c', '#89a9ff', '#ffd875', '#75dfba', '#bd8bff', '#ffac78'
 function Cursor({ color }) {
   return <svg viewBox="0 0 28 34" aria-hidden="true"><path d="M3 2L23 20L14 21L10 30Z" fill={color} stroke="white" strokeWidth="1.8" strokeLinejoin="round" /></svg>;
 }
+function CursorSwarm() {
+  const swarm = useRef(null);
+  useEffect(() => {
+    const nodes = [...swarm.current.children];
+    const points = nodes.map((_, index) => ({
+      angle: index * Math.PI / 4, radius: 50 + Math.random() * 30,
+      targetAngle: index * Math.PI / 4, targetRadius: 60,
+      nextMove: 0, phase: Math.random() * Math.PI * 2,
+    }));
+    const animation = { frame: 0, previous: undefined };
+    function animate(now) {
+      const dt = Math.min((now - (animation.previous ?? now)) / 1000, 0.05);
+      animation.previous = now;
+      const ease = 1 - Math.exp(-3.5 * dt);
+      points.forEach((point, index) => {
+        if (now >= point.nextMove) {
+          point.targetAngle = point.angle + (Math.random() - 0.5) * 1.5;
+          point.targetRadius = 44 + Math.random() * 42;
+          point.nextMove = now + 550 + Math.random() * 1000;
+        }
+        point.angle += (point.targetAngle - point.angle) * ease;
+        point.radius += (point.targetRadius - point.radius) * ease;
+        const angle = point.angle + Math.sin(now / 320 + point.phase) * 0.035;
+        const radius = point.radius + Math.sin(now / 260 + point.phase) * 3;
+        const x = Math.cos(angle) * radius;
+        const y = Math.sin(angle) * radius;
+        // The SVG tip points up. Turn it inward toward the real pointer every frame.
+        const rotation = Math.atan2(-y, -x) * 180 / Math.PI + 90;
+        nodes[index].style.transform = `translate(${x}px, ${y}px) rotate(${rotation}deg)`;
+      });
+      animation.frame = requestAnimationFrame(animate);
+    }
+    animation.frame = requestAnimationFrame(animate);
+    return () => cancelAnimationFrame(animation.frame);
+  }, []);
+  return <div ref={swarm} className="cursor-orbit" aria-hidden="true">{colors.map(color => <span key={color} style={{ '--color': color }}><svg viewBox="0 0 24 30"><path d="M12 2L22 23L12 19L2 23Z" fill={color} stroke="white" strokeWidth="1.5" strokeLinejoin="round" /></svg></span>)}</div>;
+}
 function TypedText({ text, active, instant }) {
   const [count, setCount] = useState(0);
   useEffect(() => {
@@ -50,11 +87,11 @@ function ExperienceRun({ reduced }) {
   return <div ref={stage} className={'cursor-stage ' + (phase === 'loading' && !instant ? 'is-loading' : 'is-ready')} onPointerMove={event => {
     if (event.pointerType === 'touch') return;
     const box = event.currentTarget.getBoundingClientRect();
-    stage.current.style.setProperty('--pointer-x', Math.min(box.width - 70, Math.max(70, event.clientX - box.left)) + 'px');
-    stage.current.style.setProperty('--pointer-y', Math.min(box.height - 70, Math.max(70, event.clientY - box.top)) + 'px');
+    stage.current.style.setProperty('--pointer-x', event.clientX - box.left + 'px');
+    stage.current.style.setProperty('--pointer-y', event.clientY - box.top + 'px');
   }}>
     <div className="cursor-stage-top"><span>mowu / creative loading</span><button onClick={skip}>跳过动画 →</button></div>
-    <div className="cursor-orbit" aria-hidden="true">{colors.map((color, index) => <span key={color} style={{ '--angle': index * 45 + 'deg', '--color': color }}><Cursor color={color} /></span>)}</div>
+    {phase === 'loading' && !instant && <CursorSwarm />}
     {phase === 'loading' && !instant ? <div className="cursor-loading" role="status"><span>一点灵感，正在汇合</span><h2>正在翻开这一页</h2><p>移动鼠标，让色彩跟着你。</p><div className="cursor-progress" /></div> : <div className="cursor-reveal-grid">{cards.map((card, index) => <article className={'cursor-reveal-card ' + (instant || shown >= index ? 'revealed' : '')} key={index} style={{ '--card-color': colors[index * 2] }}>
       <div className="selection-cursor"><Cursor color={colors[index * 2]} /><span>cursor {index + 1}</span></div>
       <span className="cursor-card-number">0{index + 1}</span><h2><TypedText text={card.title} active={instant || shown >= index} instant={instant} /></h2><p><TypedText text={card.text} active={instant || shown >= index} instant={instant} /></p>
@@ -83,7 +120,7 @@ export function SiteLoader({ loading, onDone }) {
     target.current.style.setProperty('--pointer-y', event.clientY + 'px');
   }}>
     <span className="loader-wordmark">✦ mowu的小站</span><button className="loader-skip" onClick={() => setSkipped(true)}>跳过动画 →</button>
-    <div className="cursor-orbit" aria-hidden="true">{colors.map((color, index) => <span key={color} style={{ '--angle': index * 45 + 'deg', '--color': color }}><Cursor color={color} /></span>)}</div>
-    <div className="cursor-loading"><span>A LITTLE COLOR, A LITTLE STORY</span><h2>{loading ? '正在收集这一页的灵感' : '准备好了，翻开这一页'}</h2><p>移动鼠标，让色彩围着你旋转。</p><div className="cursor-progress" /></div>
+    <CursorSwarm />
+    <div className="cursor-loading"><span>A LITTLE COLOR, A LITTLE STORY</span><h2>{loading ? '正在收集这一页的灵感' : '准备好了，翻开这一页'}</h2><p>移动鼠标，让色彩在你身边游动。</p><div className="cursor-progress" /></div>
   </div>;
 }

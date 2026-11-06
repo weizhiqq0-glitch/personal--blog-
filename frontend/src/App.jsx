@@ -150,7 +150,6 @@ export default function App() {
             <a className="feature-nav" href="#/daily" onClick={closePanels}>每日60s</a>
             <a className="feature-nav" href="#/playground" onClick={closePanels}>游乐场</a>
             <a className="feature-nav" href="#/experience" onClick={closePanels}>动效体验</a>
-            <a href="#/settings" onClick={closePanels}>用户设置</a>
             {user?.role === 'owner' && <a href="#/security" onClick={closePanels}>登录报备</a>}
             {user ? <><span className="account">{user.username} · {roleNames[user.role]}</span>{admin && <button disabled={busy} onClick={() => writeArticle()}>写文章</button>}{canManage && <button disabled={busy} onClick={() => { closePanels(); window.location.hash = '/management'; }}>账号管理</button>}<button disabled={busy} onClick={() => run(async () => {
               try { await api('/auth/logout', { token, method: 'POST' }); } catch (e) { if (e.status !== 401) throw e; }
@@ -203,6 +202,9 @@ export default function App() {
         <SiteStatus />
         <footer>© {year} mowu的小站 · 用心记录每一天</footer>
       </div>
+      <aside className="settings-dock" aria-label="用户设置快捷入口" inert={!introDone}>
+        <a href="#/settings" onClick={closePanels} aria-current={route === '/settings' ? 'page' : undefined}><Icon name="settings" size={21} /><span>用户<br />设置</span></a>
+      </aside>
       <Pet hidden={!!authMode || ['/experience', '/settings', '/security', '/management'].includes(route)} />
     </main>
   );
