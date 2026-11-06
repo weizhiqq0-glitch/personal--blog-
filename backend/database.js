@@ -5,6 +5,7 @@ const { randomBytes, scrypt, timingSafeEqual, createHash } = require('node:crypt
 const { promisify } = require('node:util');
 const derive = promisify(scrypt);
 function openDatabase(file = process.env.DB_PATH || path.join(__dirname, 'data', 'blog.sqlite')) {
+  if (process.env.DATABASE_URL && arguments.length === 0) return require('./postgres').openPostgres(process.env.DATABASE_URL);
   if (file !== ':memory:') mkdirSync(path.dirname(path.resolve(file)), { recursive: true });
   const db = new DatabaseSync(file);
   db.exec('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;');

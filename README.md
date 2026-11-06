@@ -2,7 +2,9 @@
 
 ## 已完成功能
 
-这是前后端分离的博客基础版。React 负责网页，Express 提供 REST API，SQLite 保存用户、文章、评论和登录会话。
+这是前后端分离的博客基础版。React 负责网页，Express 提供 REST API；本机默认使用 SQLite，免费线上部署使用 Neon PostgreSQL，保存用户、文章、评论和登录会话。
+
+免费上线请按 [免费部署说明.md](免费部署说明.md) 操作：GitHub Pages 托管前端、Render Free 运行后端、Neon 保存数据库。根目录 render.yaml 已提供后端部署配置。
 
 | 身份 | 可以做什么 |
 | --- | --- |

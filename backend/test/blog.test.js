@@ -6,11 +6,25 @@ const path = require('node:path');
 const { once } = require('node:events');
 const { createApp } = require('../app');
 const { hashPassword } = require('../database');
+const { PGlite } = require('@electric-sql/pglite');
+const { createPostgresDatabase } = require('../postgres');
 
-test('账号、文章、评论、后端权限和数据库持久化', async t => {
+for (const engine of ['sqlite', 'postgres']) {
+test(engine + '：账号、文章、评论、后端权限和数据库持久化', async t => {
   const folder = mkdtempSync(path.join(os.tmpdir(), 'blog-test-'));
   const dbPath = path.join(folder, 'test.sqlite');
-  let app = createApp({ dbPath });
+  async function makeApp() {
+    if (engine === 'sqlite') return createApp({ dbPath });
+    // Execute real PostgreSQL SQL in an isolated WASM engine, not query mocks.
+    const pg = new PGlite(path.join(folder, 'pg'));
+    const db = createPostgresDatabase({
+      async query(sql, values) { const result = await pg.query(sql, values); return { ...result, rowCount: result.affectedRows }; },
+      async end() { await pg.close(); },
+    });
+    await db.ready;
+    return createApp({ database: db });
+  }
+  let app = await makeApp();
   let server = app.listen(0, '127.0.0.1');
   await once(server, 'listening');
   let base = 'http://127.0.0.1:' + server.address().port + '/api';
@@ -25,13 +39,14 @@ test('账号、文章、评论、后端权限和数据库持久化', async t => 
       const result = await call('/auth/register', 'POST', { username: 'alice', password: 'Alice-Password-123', role: 'admin' });
       assert.equal(result.status, 201); assert.equal(result.data.user.role, 'user'); alice = result.data.token;
       assert.equal((await call('/auth/register', 'POST', { username: 'ALICE', password: 'Other-Password-123' })).status, 409);
-      const saved = app.locals.db.prepare('SELECT password_hash FROM users WHERE username=?').get('alice');
+      const saved = await app.locals.db.prepare('SELECT password_hash FROM users WHERE username=?').get('alice');
       assert.notEqual(saved.password_hash, 'Alice-Password-123');
       bob = (await call('/auth/register', 'POST', { username: 'bob', password: 'Bob-Password-123' })).data.token;
-      app.locals.db.prepare("INSERT INTO users(username,password_hash,role) VALUES (?,?,'admin')").run('owner', await hashPassword('Admin-Password-123'));
+      await app.locals.db.prepare("INSERT INTO users(username,password_hash,role) VALUES (?,?,'admin')").run('owner', await hashPassword('Admin-Password-123'));
     });
     await t.test('登录与过期会话校验', async () => {
       assert.equal((await call('/auth/login', 'POST', { username: 'alice', password: 'Wrong-Password-123' })).status, 401);
+      assert.equal((await call('/auth/login', 'POST', { username: 'ALICE', password: 'Alice-Password-123' })).status, 200);
       assert.equal((await call('/auth/login', 'POST', { username: "' OR 1=1 --", password: 'Wrong-Password-123' })).status, 401);
       admin = (await call('/auth/login', 'POST', { username: 'owner', password: 'Admin-Password-123' })).data.token;
       assert.equal((await call('/auth/me', 'GET', undefined, admin)).data.role, 'admin');
@@ -47,6 +62,9 @@ test('账号、文章、评论、后端权限和数据库持久化', async t => 
       assert.equal((await call('/articles/' + articleId, 'PUT', body, alice)).status, 403);
       assert.equal((await call('/articles/' + articleId, 'DELETE', undefined, alice)).status, 403);
       assert.equal((await call('/articles/' + articleId)).data.content, body.content);
+      assert.deepEqual((await call('/articles/' + articleId)).data.tags, ['学习']);
+      assert.match((await call('/articles/' + articleId)).data.created_at, /^\d{4}-\d{2}-\d{2}T/);
+      assert.equal((await call('/articles/not-a-number')).status, 404);
       assert.equal((await call('/articles/' + articleId, 'PUT', { ...body, title: '已修改' }, admin)).data.title, '已修改');
     });
     await t.test('评论鉴权、内容校验、本人删除和管理员删除', async () => {
@@ -62,8 +80,8 @@ test('账号、文章、评论、后端权限和数据库持久化', async t => 
       assert.equal((await call('/stats')).data.comments, 1);
     });
     await t.test('重启后账号、会话、文章、评论仍保留', async () => {
-      await new Promise(resolve => server.close(resolve)); app.locals.db.close();
-      app = createApp({ dbPath }); server = app.listen(0, '127.0.0.1'); await once(server, 'listening');
+      await new Promise(resolve => server.close(resolve)); await app.locals.db.close();
+      app = await makeApp(); server = app.listen(0, '127.0.0.1'); await once(server, 'listening');
       base = 'http://127.0.0.1:' + server.address().port + '/api';
       assert.equal((await call('/auth/me', 'GET', undefined, alice)).data.username, 'alice');
       assert.equal((await call('/articles')).data.length, 1);
@@ -80,10 +98,11 @@ test('账号、文章、评论、后端权限和数据库持久化', async t => 
       assert.equal((await call('/stats')).data.comments, 0);
       assert.equal((await call('/articles/' + articleId)).status, 404);
       assert.equal((await call('/missing')).status, 404);
-      app.locals.db.prepare('UPDATE sessions SET expires_at=0').run();
+      await app.locals.db.prepare('UPDATE sessions SET expires_at=0').run();
       assert.equal((await call('/auth/me', 'GET', undefined, admin)).status, 401);
     });
   } finally {
-    await new Promise(resolve => server.close(resolve)); app.locals.db.close(); rmSync(folder, { recursive: true, force: true });
+    await new Promise(resolve => server.close(resolve)); await app.locals.db.close(); rmSync(folder, { recursive: true, force: true });
   }
 });
+}

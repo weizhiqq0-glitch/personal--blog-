@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: personal-blog-api
+    runtime: node
+    plan: free
+    rootDir: backend
+    buildCommand: npm ci --omit=dev
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 24.21.0
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: REQUIRE_POSTGRES
+        value: "true"
+      - key: TRUST_PROXY_HOPS
+        value: "1"
+      - key: CORS_ORIGINS
+        value: https://weizhiqq0-glitch.github.io
+      - key: DATABASE_URL
+        sync: false
