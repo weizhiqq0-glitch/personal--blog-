@@ -45,13 +45,14 @@ test(engine + '：验证码、站主边界、授权与封禁', async t => {
   const pg = engine === 'postgres' ? new PGlite() : null;
   const db = pg ? createPostgresDatabase({ async query(sql, values) { const r = await pg.query(sql, values); return { ...r, rowCount: r.affectedRows }; }, async end() { await pg.close(); } }) : openDatabase(':memory:');
   await db.ready;
+  await require('../mail-budget').createMailBudget(db).calibrate(200, new Date(Date.now() + 86400000).toISOString());
   const sent = new Map();
   const emailSender = { available: true, async send({ to, code }) { sent.set(to, code); } };
-  const app = createApp({ database: db, emailSender, authLimit(req, res, next) { next(); } });
+  const app = createApp({ database: db, emailSender, mailPolicy: { ipHour: 100, ipDay: 100, siteDay: 100, browser: 100, account: 100 }, authLimit(req, res, next) { next(); } });
   const server = app.listen(0, '127.0.0.1'); await once(server, 'listening');
   const base = 'http://127.0.0.1:' + server.address().port + '/api';
   async function call(url, method = 'GET', body, token, visitor) {
-    const res = await fetch(base + url, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}), ...(visitor ? { 'X-Visitor-Token': visitor } : {}) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+    const res = await fetch(base + url, { method, headers: { 'Content-Type': 'application/json', Origin: 'http://localhost:5173', ...(token ? { Authorization: 'Bearer ' + token } : {}), ...(visitor ? { 'X-Visitor-Token': visitor } : {}) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     return { status: res.status, data: res.status === 204 ? null : await res.json() };
   }
   async function proof(contact, purpose = 'register', token) {
@@ -131,6 +132,7 @@ test(engine + '：验证码、站主边界、授权与封禁', async t => {
       manager = (await call('/auth/login', 'POST', { username: 'manager', password: 'User123' })).data;
       const visitor = 'a'.repeat(64); const key = security.tokenHash(visitor);
       assert.equal((await call('/articles', 'GET', undefined, undefined, visitor)).status, 200);
+      assert.equal((await call('/visits', 'POST', { engaged: true }, undefined, visitor)).status, 204);
       assert.equal((await call('/management/visitors/' + key + '/ban', 'POST', { banned: true }, manager.token)).status, 200);
       assert.equal((await call('/articles', 'GET', undefined, undefined, visitor)).status, 403);
       assert.equal((await call('/management/visitors/' + key + '/ban', 'POST', { banned: false }, owner.token)).status, 200);

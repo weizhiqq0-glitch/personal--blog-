@@ -10,7 +10,7 @@ const { createEmailSender } = require('./email');
 function createApi(options) {
   const { hashPassword, verifyPassword } = options.passwords || security;
   const db = options.database;
-  const accounts = createAccounts({ db, passwords: { hashPassword, verifyPassword }, emailSender: options.emailSender || createEmailSender(options.emailConfig) });
+  const accounts = createAccounts({ db, mailPolicy: options.mailPolicy, passwords: { hashPassword, verifyPassword }, emailSender: options.emailSender || createEmailSender(options.emailConfig) });
   const app = express();
   app.locals.db = db;
   app.disable('x-powered-by');
@@ -25,6 +25,7 @@ function createApi(options) {
     res.set('X-Content-Type-Options', 'nosniff');
     const token = req.get('authorization')?.replace(/^Bearer /, '');
     if (token) req.user = await db.prepare('SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?').get(tokenHash(token), Date.now());
+    req.mailIp = options.trustCloudflare ? (req.get('cf-connecting-ip') || req.ip) : req.ip;
     return accounts.checkRequest(req, res, next);
   });
   const fail = (res, code, error) => res.status(code).json({ error });
@@ -54,6 +55,11 @@ function createApi(options) {
   app.param('id', (req, res, next, id) => {
     if (!/^[1-9]\d*$/.test(id) || Number(id) > 2147483647) return fail(res, 404, '内容不存在');
     next();
+  });
+  app.post('/api/visits', async (req, res) => {
+    if (!origins.includes(req.get('origin')) || !/^[a-f0-9]{64}$/.test(req.get('x-visitor-token') || '') || req.body?.engaged !== true) return fail(res, 400, '无效的页面访问');
+    await accounts.recordVisit(req);
+    res.status(204).end();
   });
   app.use('/api/auth', accounts.authRouter(authLimit, issueSession));
   app.use('/api/management', accounts.managementRouter());

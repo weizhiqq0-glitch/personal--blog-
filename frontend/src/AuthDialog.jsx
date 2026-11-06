@@ -69,6 +69,7 @@ export function AuthDialog({ mode, busy, error, onClose, onModeChange, onSubmit,
           <h2 id="auth-title">{binding ? '绑定你的邮箱' : reset ? '找回你的账号' : register ? '开启一段新的故事' : '欢迎回来。'}</h2>
           <p id="auth-description" className="auth-description">{binding ? '验证邮箱后，账号的操作权限才会生效。' : reset ? '验证已绑定的邮箱，设置6—14位新密码。' : register ? '用邮箱验证码创建账号，保存你的足迹。' : '登录你的小小天地，继续上次的相遇。'}</p>
           <form onSubmit={submit} className="auth-form">
+            <p className="muted">注册邮箱供站主管理账号使用；成功登录会记录时间与设备供站主查看，不记录登录地点。</p>
             {!binding && !reset && <><label htmlFor="auth-username">用户名</label>
             <div className="auth-input"><Icon name="user" /><input id="auth-username" name="username" autoComplete="username" minLength={2} maxLength={32} required placeholder={register ? '给自己起个名字' : '输入你的用户名'} aria-describedby={register ? 'username-hint' : undefined} disabled={busy} /></div>
             {register && <span id="username-hint" className="field-hint">2—32位，可用中文、字母、数字、下划线和短横线</span>}</>}

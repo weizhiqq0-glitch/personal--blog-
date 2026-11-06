@@ -1,4 +1,5 @@
 function createEmailSender(config = process.env) {
+  config = Object.fromEntries(Object.entries(config).map(([name, value]) => [name, typeof value === 'string' ? value.trim() : value]));
   const provider = config.EMAIL_PROVIDER || 'emailjs';
   const from = config.EMAIL_FROM;
   const key = provider === 'resend' ? config.RESEND_API_KEY : config.BREVO_API_KEY;
@@ -23,7 +24,26 @@ function createEmailSender(config = process.env) {
       let response;
       try { response = await fetch(request.url, { method: 'POST', headers: { ...request.headers, 'Content-Type': 'application/json' }, body: JSON.stringify(request.body), signal: AbortSignal.timeout(15000) }); }
       catch { const error = Error('验证码邮件暂时发送失败，请稍后重试'); error.status = 502; throw error; }
-      if (!response.ok) { const error = Error('验证码邮件发送失败，请站主检查发信服务配置'); error.status = 502; throw error; }
+      if (!response.ok) {
+        // Only return fixed diagnostic labels, never the provider's raw response:
+        // it may contain credentials, email addresses, or template parameters.
+        let reason = '发信服务拒绝请求';
+        if (provider === 'emailjs') {
+          const detail = (await response.text().catch(() => '')).slice(0, 8000);
+          if (/non.browser|browser.*only|API.*disabled/i.test(detail)) reason = 'EmailJS 未允许后端请求，请检查 Account → Security';
+          else if (/private.?key|access.?token/i.test(detail)) reason = 'EmailJS 私钥校验失败，请检查 Private Key';
+          else if (/public.?key|user.?id|account.*not.*found/i.test(detail)) reason = 'EmailJS 公钥或账号校验失败，请检查 Public Key';
+          else if (/template/i.test(detail)) reason = 'EmailJS 模板校验失败，请检查 Template ID 和模板设置';
+          else if (/service.?id|service.*not.*found|service.*invalid/i.test(detail)) reason = 'EmailJS 服务编号校验失败，请检查 Service ID';
+          else if (/origin|domain|whitelist|allowlist/i.test(detail)) reason = 'EmailJS 来源限制拒绝请求，请检查 Security 的 Domains 设置';
+          else if (/quota|limit|too many/i.test(detail) || response.status === 429) reason = 'EmailJS 发送额度或频率受限';
+          else if (/(?:recipient|address).*(?:invalid|corrupt|missing|empty|required)|(?:invalid|missing|empty).*recipient/i.test(detail)) reason = 'EmailJS 收件人设置无效，请检查模板 To Email';
+          else if (/smtp|authentication|credentials/i.test(detail)) reason = 'EmailJS 连接发件邮箱失败，请检查邮箱服务授权';
+        }
+        const error = Error(`${reason}（发信接口 HTTP ${response.status}）`);
+        error.status = 502;
+        throw error;
+      }
     },
   };
 }

@@ -28,6 +28,7 @@ test(engine + '：账号、文章、评论、后端权限和数据库持久化',
     return createApp({ database: db, emailSender });
   }
   let app = await makeApp();
+  await require('../mail-budget').createMailBudget(app.locals.db).calibrate(200, new Date(Date.now() + 86400000).toISOString());
   let server = app.listen(0, '127.0.0.1');
   await once(server, 'listening');
   let base = 'http://127.0.0.1:' + server.address().port + '/api';

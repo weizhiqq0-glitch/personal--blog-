@@ -4,8 +4,22 @@ const { validateCredentials, tokenHash } = require('./security');
 const { PERMISSIONS, effectivePermissions, publicUser } = require('./permissions');
 const { createVerification, normalizeContact } = require('./verification');
 
-function createAccounts({ db, passwords, emailSender }) {
-  const verification = createVerification(db, emailSender);
+const { createMailBudget } = require('./mail-budget');
+function createAccounts({ db, passwords, emailSender, mailPolicy }) {
+  const budget = createMailBudget(db, mailPolicy);
+  const verification = createVerification(db, emailSender, budget);
+  let loginReady;
+  function loginTable() {
+    if (!loginReady) loginReady = Promise.resolve(db.ready).then(() => db.prepare('CREATE TABLE IF NOT EXISTS account_last_login(user_id INTEGER PRIMARY KEY,logged_at BIGINT NOT NULL,device TEXT NOT NULL)').run()).catch(error => { loginReady = undefined; throw error; });
+    return loginReady;
+  }
+  async function recordLogin(req, user) {
+    await loginTable();
+    const ua = req.get('user-agent') || '';
+    const browser = /Edg\//.test(ua) ? 'Edge' : /Firefox\//.test(ua) ? 'Firefox' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : '未知浏览器';
+    const system = /Android/.test(ua) ? 'Android' : /iPhone|iPad/.test(ua) ? 'iOS/iPadOS' : /Windows/.test(ua) ? 'Windows' : /Macintosh/.test(ua) ? 'macOS' : /Linux/.test(ua) ? 'Linux' : '未知系统';
+    await db.prepare('INSERT INTO account_last_login(user_id,logged_at,device) VALUES (?,?,?) ON CONFLICT(user_id) DO UPDATE SET logged_at=excluded.logged_at,device=excluded.device').run(user.id, Date.now(), system + ' · ' + browser);
+  }
   const fail = (res, status, error) => res.status(status).json({ error });
   const signedIn = (req, res, next) => req.user ? next() : fail(res, 401, '请先登录');
   function requireVerified(req, res, next) {
@@ -31,11 +45,9 @@ function createAccounts({ db, passwords, emailSender }) {
     if (!/^[a-f0-9]{64}$/.test(visitor || '')) visitor = randomBytes(32).toString('hex');
     res.set('X-Visitor-Token', visitor);
     const key = tokenHash(visitor);
-    const now = Date.now();
-    const record = await db.prepare(`INSERT INTO visitors(key,first_seen,last_seen) VALUES (?,?,?)
-      ON CONFLICT(key) DO UPDATE SET last_seen=excluded.last_seen RETURNING *`).get(key, now, now);
+    const record = await db.prepare('SELECT * FROM visitors WHERE key=?').get(key);
     req.visitorKey = key;
-    if (record.banned && req.user?.role !== 'owner') return fail(res, 403, '当前访客已被限制访问，请联系站主');
+    if (record?.banned && req.user?.role !== 'owner') return fail(res, 403, '当前访客已被限制访问，请联系站主');
     next();
   }
   async function audit(req, action, target, details) {
@@ -58,7 +70,7 @@ function createAccounts({ db, passwords, emailSender }) {
         if (!verification.available) return fail(res, 503, '邮箱验证码服务尚未配置');
         return res.json({ verificationId: randomBytes(32).toString('hex'), expiresIn: 300, retryAfter: 60, message: '若此邮箱已绑定账号，将收到验证码' });
       }
-      const result = await verification.send({ contact, purpose, userId: purpose === 'bind' ? req.user.id : known?.id || null });
+      const result = await verification.send({ contact, purpose, userId: purpose === 'bind' ? req.user.id : known?.id || null, context: { browser: req.visitorKey, ip: req.mailIp, account: req.user?.id || known?.id, owner: req.user?.role === 'owner' && !!req.user.verified_at } });
       res.json(purpose === 'reset-password' ? { ...result, message: '若此邮箱已绑定账号，将收到验证码' } : result);
     });
     router.post('/register', authLimit, async (req, res) => {
@@ -71,6 +83,7 @@ function createAccounts({ db, passwords, emailSender }) {
         const result = await db.prepare("INSERT INTO users(username,password_hash,role,contact_type,contact_value,verified_at) VALUES (?,?,'user','email',?,?)")
           .run(username, await passwords.hashPassword(password), contact, new Date().toISOString());
         const user = await db.prepare('SELECT * FROM users WHERE id=?').get(Number(result.lastInsertRowid));
+        await recordLogin(req, user);
         res.status(201).json(await issueSession(user));
       } catch (error) {
         if (error.code === '23505' || error.message.includes('UNIQUE')) return fail(res, 409, '用户名或邮箱已被使用');
@@ -85,6 +98,7 @@ function createAccounts({ db, passwords, emailSender }) {
       const matches = await passwords.verifyPassword(password, user?.password_hash || '00000000000000000000000000000000:' + '00'.repeat(64));
       if (!user || !matches) return fail(res, 401, '用户名或密码错误');
       if (user.banned) return fail(res, 403, '此账号已被封禁，请联系站主');
+      await recordLogin(req, user);
       res.json(await issueSession(user));
     });
     router.get('/me', signedIn, (req, res) => res.json(publicUser(req.user)));
@@ -123,10 +137,20 @@ function createAccounts({ db, passwords, emailSender }) {
     router.param('id', (req, res, next, id) => /^[1-9]\d*$/.test(id) && Number(id) <= 2147483647 ? next() : fail(res, 404, '账号不存在'));
     router.use(requireVerified);
     const canList = (req, res, next) => req.user.role === 'owner' || effectivePermissions(req.user).includes('user.ban') ? next() : fail(res, 403, '没有账号管理权限');
+    router.get('/email-budget', ownerOnly, async (req, res) => res.json(await budget.status()));
+    router.patch('/email-budget', ownerOnly, async (req, res) => {
+      const result = await budget.calibrate(req.body?.remaining, req.body?.resetAt);
+      await audit(req, 'email.calibrate', 'budget', { remaining: req.body.remaining, resetAt: req.body.resetAt });
+      res.json(result);
+    });
     router.get('/users', canList, async (req, res) => {
+      await loginTable();
       const users = await db.prepare('SELECT id,username,role,contact_type,contact_value,verified_at,banned,ban_reason,permissions,created_at FROM users ORDER BY id DESC LIMIT 200').all();
+      const logins = req.user.role === 'owner' ? await db.prepare('SELECT * FROM account_last_login').all() : [];
       res.json({ permissions: PERMISSIONS, users: users.map(user => ({ id: user.id, username: user.username, role: user.role, verified: !!user.verified_at, banned: !!user.banned, banReason: user.ban_reason,
-        contact: user.contact_value ? user.contact_value[0] + '***@' + user.contact_value.split('@')[1] : '', overrides: JSON.parse(user.permissions || '{}'), permissions: effectivePermissions(user), created_at: user.created_at })) });
+        contact: user.contact_value ? (req.user.role === 'owner' ? user.contact_value : user.contact_value[0] + '***@' + user.contact_value.split('@')[1]) : '',
+        ...(req.user.role === 'owner' ? { lastLogin: (() => { const login = logins.find(item => item.user_id === user.id); return login ? { time: Number(login.logged_at), device: login.device } : null; })() } : {}),
+        overrides: JSON.parse(user.permissions || '{}'), permissions: effectivePermissions(user), created_at: user.created_at })) });
     });
     router.patch('/users/:id', ownerOnly, async (req, res) => {
       const target = await db.prepare('SELECT * FROM users WHERE id=?').get(req.params.id);
@@ -150,7 +174,8 @@ function createAccounts({ db, passwords, emailSender }) {
       res.json({ message: req.body.banned ? '账号已封禁，登录会话已失效' : '账号已解除封禁' });
     });
     router.get('/visitors', requirePermission('visitor.ban'), async (req, res) => {
-      const records = await db.prepare('SELECT * FROM visitors ORDER BY last_seen DESC LIMIT 100').all();
+      await budget.init();
+      const records = await db.prepare('SELECT v.key,p.first_seen,p.last_seen,v.banned,v.ban_reason FROM page_visitors p JOIN visitors v ON v.key=p.key ORDER BY p.last_seen DESC LIMIT 100').all();
       res.json(records.map(record => ({ key: record.key, current: record.key === req.visitorKey, label: '访客 ' + record.key.slice(0, 10), firstSeen: Number(record.first_seen), lastSeen: Number(record.last_seen), banned: !!record.banned, banReason: record.ban_reason })));
     });
     router.post('/visitors/:key/ban', requirePermission('visitor.ban'), async (req, res) => {
@@ -164,6 +189,12 @@ function createAccounts({ db, passwords, emailSender }) {
     router.get('/events', ownerOnly, async (req, res) => res.json(await db.prepare('SELECT event_key,actor_id,action,target,details,created_at FROM moderation_events ORDER BY created_at DESC LIMIT 100').all()));
     return router;
   }
-  return { checkRequest, requireVerified, requirePermission, authRouter, managementRouter };
+  async function recordVisit(req) {
+    await budget.init();
+    const now = Date.now();
+    await db.prepare('INSERT INTO visitors(key,first_seen,last_seen) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET last_seen=excluded.last_seen').run(req.visitorKey, now, now);
+    await db.prepare('INSERT INTO page_visitors(key,first_seen,last_seen) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET last_seen=excluded.last_seen').run(req.visitorKey, now, now);
+  }
+  return { recordVisit, checkRequest, requireVerified, requirePermission, authRouter, managementRouter };
 }
 module.exports = { createAccounts };

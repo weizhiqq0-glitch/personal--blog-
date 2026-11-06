@@ -70,6 +70,7 @@ test('Workers 运行时、真实 PostgreSQL 密码哈希、权限、重启和频
   let admin, alice, bob, articleId;
   try {
     await db.ready;
+    await require('../mail-budget').createMailBudget(db).calibrate(200, new Date(Date.now() + 86400000).toISOString());
     const passwords = createOnlinePasswords(db);
     await t.test('pgcrypto 真实哈希、长密码不会在72字节处被截断', async () => {
       const password = '长'.repeat(35) + '-Password-A';

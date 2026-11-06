@@ -4,11 +4,15 @@ import { AuthDialog } from './AuthDialog';
 import { Icon } from './Icon';
 import { ManagementPanel } from './ManagementPanel';
 import './App.css';
+import { usePageVisit } from './usePageVisit';
+import { useTheme } from './useTheme';
+import { SiteStatus } from './SiteStatus';
 
 const date = value => new Date(value).toLocaleString('zh-CN');
 const initialDraft = { title: '', content: '', tags: '' };
 export default function App() {
-  const [dark, setDark] = useState(false);
+  usePageVisit();
+  const { dark, theme, choose } = useTheme();
   const [keyword, setKeyword] = useState('');
   const [articles, setArticles] = useState([]);
   const [stats, setStats] = useState({ articles: 0, comments: 0, users: 0 });
@@ -128,7 +132,8 @@ export default function App() {
               try { await api('/auth/logout', { token, method: 'POST' }); } catch (e) { if (e.status !== 401) throw e; }
               sessionStorage.removeItem('blog-token'); setToken(''); setUser(null); setEditing(false); setManagement(false); setMessage('已退出登录');
             })}>退出</button></> : <><button className="nav-login" disabled={busy} onClick={() => showAuth('login')}><Icon name="user" size={16} />登录</button><button className="nav-register" disabled={busy} onClick={() => showAuth('register')}>加入小站 <span>↗</span></button></>}
-            <button className="icon-button" aria-label={dark ? '切换日间模式' : '切换夜间模式'} onClick={() => setDark(!dark)}><Icon name={dark ? 'sun' : 'moon'} /></button>
+            <button className="icon-button" aria-label={dark ? '切换日间模式' : '切换夜间模式'} onClick={() => choose(dark ? 'light' : 'dark')}><Icon name={dark ? 'sun' : 'moon'} /></button>
+            <select className="theme-select" aria-label="主题模式" value={theme} onChange={e => choose(e.target.value)}><option value="auto">随时间切换</option><option value="light">始终日间</option><option value="dark">始终夜间</option></select>
           </nav>
         </header>
         {error && !authMode && <div className="notice error" role="alert">{error}<button disabled={busy} onClick={() => run(refresh)}>重新连接</button></div>}
@@ -162,6 +167,7 @@ export default function App() {
         <section id="articles"><div className="section-heading"><div><p className="eyebrow">最新记录</p><h2>最近写了什么</h2></div><label className="search"><Icon name="search" size={18} /><input aria-label="搜索文章或标签" value={keyword} onChange={e => setKeyword(e.target.value)} placeholder="搜索文章或标签" /></label></div>
           {loading ? <p className="empty">正在加载文章…</p> : <><div className="article-grid">{visible.map(a => <article key={a.id} className="article-card"><div className="article-icon"><Icon name="book" size={24} /></div><p className="article-date">{date(a.created_at)} · {a.comment_count}条评论</p><h3>{a.title}</h3><p className="article-summary">{a.summary}</p><div className="article-footer"><div className="tags">{a.tags.map(t => <span key={t}>#{t}</span>)}</div><button className="read-button" disabled={busy} onClick={() => openArticle(a.id)}>阅读 →</button></div></article>)}</div>{!visible.length && !error && <div className="empty"><span className="empty-icon"><Icon name="book" size={32} /></span><h3>{keyword ? '没有找到这篇故事' : '故事，从这里开始'}</h3><p>{keyword ? '换个词试试，或许会有新的发现。' : '第一篇文章正在酝酿，值得记录的日子都不必着急。'}</p>{admin && !keyword && <button className="read-button" onClick={() => writeArticle()}>写下第一篇文章 →</button>}</div>}</>}
         </section>
+        <SiteStatus />
         <footer>© {year} 我的小站 · 用心记录每一天</footer>
       </div>
     </main>

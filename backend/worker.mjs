@@ -13,6 +13,7 @@ if (env.DATABASE_URL) {
     passwords: security.createOnlinePasswords(database),
     authLimit: security.createOnlineAuthLimit(database),
     emailConfig: env,
+    trustCloudflare: true,
   });
   app.listen(3000);
 }

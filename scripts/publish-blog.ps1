@@ -21,7 +21,7 @@ try {
     Write-Host '上传成功！GitHub Pages 会自动构建，通常需要几分钟。' -ForegroundColor Green
     Write-Host '发布进度：https://github.com/weizhiqq0-glitch/personal--blog-/actions'
     Write-Host '网站：https://weizhiqq0-glitch.github.io/personal--blog-/'
-    Write-Host '公网登录和评论仍需部署后端。'
+    Write-Host '如同时修改了后端，请运行“更新后端.cmd”；首次更新邮件额度功能后需由站主在账号管理里校准实际额度。'
 } catch {
     Write-Host $_.Exception.Message -ForegroundColor Red
     Write-Host '请保留此窗口并截图，不要强制推送。'

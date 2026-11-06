@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from './api';
+import { EmailBudget } from './EmailBudget';
 
 const roleNames = { guest: '访客', user: '用户', admin: '管理员', owner: '站主' };
 function UserEditor({ account, labels, disabled, save }) {
@@ -52,13 +53,14 @@ export function ManagementPanel({ user, onClose }) {
   return <section className="article-card panel management-panel" aria-label="账号管理">
     <div className="section-heading"><div><p className="eyebrow">{owner ? '站主控制台' : '站点管理'}</p><h2>账号与访问管理</h2></div><button onClick={onClose}>关闭</button></div>
     {error && <div className="notice error" role="alert">{error}</div>}{message && <div className="notice" role="status">{message}</div>}
+    {owner && <EmailBudget />}
     {listUsers && <><h3>账号</h3><p className="muted">站主可授权或限制其他账号；管理员只能封禁或解封普通用户。</p>
-      {accounts.map(account => <article className="management-row" key={account.id}><div><strong>{account.username}</strong><span className="role-badge">{roleNames[account.role]}</span><p>{account.contact || '尚未绑定邮箱'} · {account.verified ? '已验证' : '待验证'} · {account.banned ? '已封禁' : '正常'}</p>{account.banReason && <p className="muted">原因：{account.banReason}</p>}</div>
+      {accounts.map(account => <article className="management-row" key={account.id}><div><strong>{account.username}</strong><span className="role-badge">{roleNames[account.role]}</span><p>{account.contact || '尚未绑定邮箱'} · {account.verified ? '已验证' : '待验证'} · {account.banned ? '已封禁' : '正常'}</p>{owner && <p className="muted">上次成功登录：{account.lastLogin ? new Date(account.lastLogin.time).toLocaleString('zh-CN') + ' · ' + account.lastLogin.device : '暂无记录（更新后开始记录）'}</p>}{account.banReason && <p className="muted">原因：{account.banReason}</p>}</div>
         {account.id !== user.id && account.role !== 'owner' && (owner || account.role === 'user') && <button className={account.banned ? '' : 'danger'} disabled={busy} onClick={() => ban('/management/users/' + account.id + '/ban', !account.banned)}>{account.banned ? '解除封禁' : '封禁账号'}</button>}
         {owner && account.role !== 'owner' && <UserEditor key={account.id + account.role + JSON.stringify(account.overrides)} account={account} labels={labels} disabled={busy} save={body => update('/management/users/' + account.id, body)} />}
       </article>)}
     </>}
-    {listVisitors && <><h3>近期浏览器访客</h3><p className="muted">访客按浏览器标识区分；清除浏览器数据后可能产生新标识。这里最多显示最近100个标识。</p>
+    {listVisitors && <><h3>近期浏览器访客</h3><p className="muted">仅记录页面可见至少3秒且发生点击、按键或滚动的浏览器；接口检查不计入。此为有效浏览估算，不能保证全部为真人。清除浏览器数据可能产生新标识，最多显示最近100个。</p>
       {visitors.map(visitor => <article className="management-row" key={visitor.key}><div><strong>{visitor.label}</strong><p>{new Date(visitor.lastSeen).toLocaleString('zh-CN')} · {visitor.banned ? '已封禁' : '正常'}</p>{visitor.banReason && <p className="muted">原因：{visitor.banReason}</p>}</div><button className={visitor.banned ? '' : 'danger'} disabled={busy || visitor.current} onClick={() => ban('/management/visitors/' + visitor.key + '/ban', !visitor.banned)}>{visitor.current ? '当前浏览器' : visitor.banned ? '解除封禁' : '封禁访客'}</button></article>)}
     </>}
   </section>;
