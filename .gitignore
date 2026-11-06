@@ -17,3 +17,20 @@ backend/data/
 .wrangler/
 .dev.vars
 .dev.vars.*
+
+# Private exports, credentials, backups and local logs must stay off GitHub
+private/
+.local/
+*.db
+*.sql
+*.dump
+*.bak
+*.log
+*.pem
+*.key
+*.p12
+*.pfx
+*.zip
+*.7z
+Thumbs.db
+.DS_Store

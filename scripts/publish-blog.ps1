@@ -7,8 +7,10 @@ try {
     if (-not (Get-Command git -ErrorAction SilentlyContinue)) { throw '找不到 Git。' }
     if ($CheckOnly) { Write-Host '检查通过：启动文件、中文编码、项目路径和 Git 均正常。'; exit 0 }
     Write-Host '正在保存博客改动……'
+    & (Join-Path $PSScriptRoot 'check-public.ps1')
     git add --all
     if ($LASTEXITCODE -ne 0) { throw '保存改动失败。' }
+    & (Join-Path $PSScriptRoot 'check-public.ps1') -Staged
     git diff --cached --quiet
     $diffResult = $LASTEXITCODE
     if ($diffResult -eq 1) {
@@ -21,7 +23,7 @@ try {
     Write-Host '上传成功！GitHub Pages 会自动构建，通常需要几分钟。' -ForegroundColor Green
     Write-Host '发布进度：https://github.com/weizhiqq0-glitch/personal--blog-/actions'
     Write-Host '网站：https://weizhiqq0-glitch.github.io/personal--blog-/'
-    Write-Host '如同时修改了后端，请运行“更新后端.cmd”；首次更新邮件额度功能后需由站主在账号管理里校准实际额度。'
+    Write-Host '如同时修改了后端，请运行“tools/更新后端.cmd”；首次更新邮件额度功能后需由站主在账号管理里校准实际额度。'
 } catch {
     Write-Host $_.Exception.Message -ForegroundColor Red
     Write-Host '请保留此窗口并截图，不要强制推送。'

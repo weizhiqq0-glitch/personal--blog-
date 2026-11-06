@@ -8,7 +8,7 @@
 
 1. 注册并验证 Cloudflare 邮箱，登录 https://dash.cloudflare.com/ 。保持 Workers Free，无需购买域名或升级付费。
 2. 在 Neon 的 Connect 弹窗复制完整 PostgreSQL 连接串，开启 Connection pooling。连接串包含密码，自己保管。
-3. 在项目根目录双击 deploy-free-backend.cmd。首次选择1；本次账号规则升级选择1迁移数据库并创建或认领站主；新版站主已准备好才选2。
+3. 在项目根目录双击 ../tools/首次部署后端.cmd。首次选择1；本次账号规则升级选择1迁移数据库并创建或认领站主；新版站主已准备好才选2。
 4. 工具会检查部署包。首次部署时，需要粘贴 Neon 连接串并输入站主用户名、预留邮箱、6—14位密码和确认密码。密码和连接串输入都不显示。工具将初始化 Neon 的表及 pgcrypto 扩展，并创建或认领唯一站主。
 5. 工具打开 Cloudflare 授权页面时，在自己的账号中允许 Wrangler 操作。网页已经登录也需要这次命令行授权。
 6. 发布工具要求 secret 值时，再次粘贴完整 Neon 连接串。它存为 Cloudflare 加密 Secret，不会写入仓库。
@@ -23,7 +23,7 @@
 2. 添加或修改仓库 Variable：VITE_API_URL，值为上一步的 HTTPS 后端根网址，不带 /api。
 3. 仓库 Actions 中运行 Deploy blog to GitHub Pages 工作流，等它完成。
 4. 打开 https://weizhiqq0-glitch.github.io/personal--blog-/ ，配置下述邮件服务后，用站主账号登录并验证预留邮箱，再发文章；普通用户通过邮箱验证码注册、评论。
-5. 双击已经修复的“发布博客.cmd”把当前代码上传 GitHub，保存本次后端改动。不要手工上传数据库或私密配置。
+5. 双击已经修复的“tools/发布博客.cmd”把当前代码上传 GitHub，保存本次后端改动。不要手工上传数据库或私密配置。
 
 ## 文件与配置的作用
 
@@ -38,9 +38,9 @@
 | backend/security.js | 本机密码哈希、令牌摘要、格式检查 |
 | backend/wrangler.jsonc | Worker 名称、入口、兼容日期、允许的前端域名 |
 | scripts/deploy-free-backend.ps1 | Windows 引导部署工具 |
-| deploy-free-backend.cmd | 双击部署入口 |
+| ../tools/首次部署后端.cmd | 双击部署入口 |
 
-数据库需要 DATABASE_URL 私密配置；真实邮件验证现改用 EmailJS，需要 EMAILJS_SERVICE_ID、EMAILJS_TEMPLATE_ID、EMAILJS_PUBLIC_KEY、EMAILJS_PRIVATE_KEY。先按 [邮箱验证码配置说明.md](邮箱验证码配置说明.md) 连接邮箱并配置模板，再双击 configure-email.cmd 配置并重部署。必须实际收到验证码后再开放注册，详情见账号权限说明。CORS_ORIGINS 和 EMAIL_PROVIDER 已写在 wrangler.jsonc 中。Node 服务器使用的 HOST、PORT、NODE_VERSION、TRUST_PROXY_HOPS 等 Render 环境变量不需要搬过来。
+数据库需要 DATABASE_URL 私密配置；真实邮件验证现改用 EmailJS，需要 EMAILJS_SERVICE_ID、EMAILJS_TEMPLATE_ID、EMAILJS_PUBLIC_KEY、EMAILJS_PRIVATE_KEY。先按 [邮箱验证码配置说明.md](邮箱验证码配置说明.md) 连接邮箱并配置模板，再双击 ../tools/配置邮箱验证码.cmd 配置并重部署。必须实际收到验证码后再开放注册，详情见账号权限说明。CORS_ORIGINS 和 EMAIL_PROVIDER 已写在 wrangler.jsonc 中。Node 服务器使用的 HOST、PORT、NODE_VERSION、TRUST_PROXY_HOPS 等 Render 环境变量不需要搬过来。
 
 ## 密码和数据
 
