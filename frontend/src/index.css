@@ -1,0 +1,23 @@
+:root {
+  font-family:
+    Inter, "Microsoft YaHei", "PingFang SC", sans-serif;
+  color: #302c4f;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  min-width: 320px;
+  min-height: 100%;
+  margin: 0;
+}
+
+body {
+  min-height: 100vh;
+}
