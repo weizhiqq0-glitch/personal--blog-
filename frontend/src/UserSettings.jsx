@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { api } from './api';
+import { AvatarSettings } from './AvatarSettings';
 
-export function UserSettings({ user, theme, choose, onSaved }) {
+export function UserSettings({ user, theme, choose, onSaved, onAvatarUpdated }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   async function save(event) {
@@ -19,7 +20,9 @@ export function UserSettings({ user, theme, choose, onSaved }) {
   }
   return <section className="article-card panel settings-page"><p className="eyebrow">MY ACCOUNT</p><h1>用户设置</h1>
     <p className="muted">管理你的账号与当前浏览器的显示偏好。</p>
+    {user && <AvatarSettings user={user} onUpdated={onAvatarUpdated} />}
     <label>显示主题<select value={theme} onChange={event => choose(event.target.value)}><option value="auto">随时间切换（06:00—18:00 日间）</option><option value="light">始终日间</option><option value="dark">始终夜间</option></select></label>
+    <a className="primary-button" href="#/appearance">背景设置 →</a>
     <h2>账号资料</h2>{!user ? <p>请先登录，再修改账号资料。</p> : <><p>已绑定邮箱：{user.contact?.value || '尚未绑定'}</p><p className="muted">邮箱更换需另行核验，这里不提供直接覆盖。</p>
       <form key={user.id + user.username} onSubmit={save}>
         <label>用户名<input name="username" defaultValue={user.username} minLength={2} maxLength={32} required autoComplete="username" /></label>

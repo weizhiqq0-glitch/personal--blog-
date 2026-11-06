@@ -4,21 +4,22 @@
 
 - 源码仓库：https://github.com/weizhiqq0-glitch/personal--blog-
 - 在线演示：https://weizhiqq0-glitch.github.io/personal--blog-/
-- 后端健康检查：https://personal-blog-api.mowu-weizhi.workers.dev/api/health
+- 管理后台：https://weizhiqq0-glitch.github.io/personal--blog-/#/admin
+- 后端健康检查：https://mowu-blog-api-gateway.pages.dev/api/health
 
 ## 技术与功能
 
 | 部分 | 技术与功能 |
 | --- | --- |
-| 前端 | React、Vite；登录注册弹窗、文章、搜索、评论、管理面板 |
+| 前端 | React、Vite；独立管理后台、用户设置浮层、头像、图片/视频背景、文章与扩展板块 |
 | 后端 | Node.js、Express REST API；认证与权限由后端执行 |
 | 数据库 | 本地 SQLite，线上 Neon PostgreSQL；真实数据不提交仓库 |
-| 在线部署 | GitHub Pages 前端 + Cloudflare Workers 后端 + Neon |
+| 在线部署 | GitHub Pages 前端 + Pages 免费接口入口 + Cloudflare Workers 后端 + Neon |
 | 账号 | 邮箱验证码注册、密码6—14位、用户名唯一、邮箱找回密码 |
 | 身份 | 访客、用户、管理员、唯一站主；普通注册不能自选管理身份 |
 | 文章 | 管理员/站主发布、编辑、删除；访客阅读 |
 | 评论 | 已验证用户发表、删除自己的评论；管理员/站主管理评论 |
-| 其他 | 有效浏览访客统计、邮件防刷与额度估算、日期/建站时长、授权天气、定时/手动主题 |
+| 其他 | 站员、照片墙、音乐、说说、友链、项目、圆盘导航、问题反馈、访客统计、邮件额度、授权天气、定时主题 |
 
 密码保存为加盐哈希；会话令牌随机生成，数据库只保存摘要。文章与评论按纯文本渲染，不执行用户提交的HTML。没有公共默认管理员密码。
 
@@ -30,6 +31,7 @@ personal-blog/
 ├─ 博客工具.cmd            Windows统一工具箱
 ├─ frontend/              前端源码、配置、依赖清单
 ├─ backend/               后端源码、测试、数据库适配、Workers配置
+├─ gateway/               Pages免费接口入口，通过内部绑定访问原后端
 ├─ docs/                  使用、部署、权限、隐私、交付、迁移说明
 ├─ tools/                 启动、发布、更新后端等双击入口
 ├─ scripts/               工具使用的PowerShell实现
@@ -82,6 +84,9 @@ npm --prefix backend run worker:check
 Windows可运行 `tools/检查公开文件.cmd`；发布前也自动检查私密文件和常见密钥模式，不能代替完整安全审计。完整Workers/原生PostgreSQL测试需要隔离的 `WORKER_TEST_DATABASE_URL`（GitHub CI提供）；本地未配置会跳过这一项，其余SQLite/PostgreSQL测试照常运行。
 
 ## 更多说明
+
+- [头像、背景与 Wallpaper Engine 的使用边界](docs/头像与背景.md)
+- [向别人介绍前后端与管理功能](docs/前后端与管理功能说明.md)
 
 新版也可隔离本地测试：双击 `tools/本地测试新版.cmd`，打开 http://127.0.0.1:5189/ ，参见 [本地新版测试](docs/本地新版测试.md)。测试库与线上完全独立。
 

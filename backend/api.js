@@ -67,8 +67,24 @@ function createApi(options) {
     res.status(204).end();
   });
   app.use('/api/auth', accounts.authRouter(authLimit, issueSession));
+  app.use('/api/avatars', require('./avatars').createAvatars({ db, requireVerified: accounts.requireVerified, authLimit }));
   app.use('/api/management', accounts.managementRouter(authLimit));
+  const support = require('./support').createSupport({ db, requireVerified: accounts.requireVerified, requirePermission: accounts.requirePermission, authLimit });
+  app.use('/api/feedback', support.publicRouter);
+  app.use('/api/management', support.managementRouter);
+  app.use('/api/content', require('./site-content').createSiteContent({ db, requireVerified: accounts.requireVerified, requirePermission: accounts.requirePermission, authLimit }));
   app.get('/api/stats', async (req, res) => res.json({ articles: (await db.prepare('SELECT COUNT(*) AS n FROM articles').get()).n, comments: (await db.prepare('SELECT COUNT(*) AS n FROM comments').get()).n, users: (await db.prepare('SELECT COUNT(*) AS n FROM users').get()).n }));
+  app.get('/api/site-profile', async (req, res) => {
+    const owner = await db.prepare("SELECT id,username FROM users WHERE role='owner'").get();
+    res.json(owner ? { id: owner.id, username: owner.username } : { id: null, username: 'mowu' });
+  });
+  app.get('/api/members', async (req, res) => {
+    const page = Number(req.query.page || 1);
+    if (!Number.isSafeInteger(page) || page < 1 || page > 100000) return fail(res, 400, '页码无效');
+    // Public directory deliberately selects no contact, password or device fields.
+    const rows = await db.prepare("SELECT id,username,role FROM users WHERE banned=0 AND verified_at IS NOT NULL AND role IN ('owner','admin','user') ORDER BY CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,id LIMIT 61 OFFSET ?").all((page - 1) * 60);
+    res.json({ members: rows.slice(0, 60), hasMore: rows.length > 60 });
+  });
   const articleSelect = 'SELECT a.*,u.username AS author,(SELECT COUNT(*) FROM comments c WHERE c.article_id=a.id) AS comment_count FROM articles a JOIN users u ON u.id=a.author_id';
   const serialize = article => ({ ...article, tags: JSON.parse(article.tags) });
   const getArticle = id => db.prepare(articleSelect + ' WHERE a.id=?').get(id);

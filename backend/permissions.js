@@ -2,6 +2,8 @@ const PERMISSIONS = {
   'article.read': '阅读文章', 'comment.read': '阅读评论', 'comment.create': '发表评论',
   'article.manage': '管理文章', 'comment.moderate': '管理全部评论',
   'user.ban': '管理用户封禁', 'visitor.ban': '管理访客封禁',
+  'feedback.manage': '处理问题反馈',
+  'site.manage': '管理扩展板块内容',
 };
 const defaults = {
   guest: ['article.read', 'comment.read'],

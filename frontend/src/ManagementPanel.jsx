@@ -14,7 +14,7 @@ function UserEditor({ account, labels, disabled, save }) {
   </form></details>;
 }
 
-export function ManagementPanel({ user, onClose }) {
+export function ManagementPanel({ user, onClose, showBudget = true }) {
   const [accounts, setAccounts] = useState([]);
   const [visitors, setVisitors] = useState([]);
   const [labels, setLabels] = useState({});
@@ -53,7 +53,7 @@ export function ManagementPanel({ user, onClose }) {
   return <section className="article-card panel management-panel" aria-label="账号管理">
     <div className="section-heading"><div><p className="eyebrow">{owner ? '站主控制台' : '站点管理'}</p><h2>账号与访问管理</h2></div><button onClick={onClose}>返回首页</button></div>
     {error && <div className="notice error" role="alert">{error}</div>}{message && <div className="notice" role="status">{message}</div>}
-    {owner && <EmailBudget />}
+    {owner && showBudget && <EmailBudget />}
     {listUsers && <><h3>账号</h3><p className="muted">站主可授权或限制其他账号；管理员只能封禁或解封普通用户。</p>
       {accounts.map(account => <article className="management-row" key={account.id}><div><strong>{account.username}</strong><span className="role-badge">{roleNames[account.role]}</span><p>{account.contact || '尚未绑定邮箱'} · {account.verified ? '已验证' : '待验证'} · {account.banned ? '已封禁' : '正常'}</p>{owner && <p className="muted">上次成功登录：{account.lastLogin ? new Date(account.lastLogin.time).toLocaleString('zh-CN') + ' · ' + account.lastLogin.device : '暂无记录（更新后开始记录）'}</p>}{account.banReason && <p className="muted">原因：{account.banReason}</p>}</div>
         {account.id !== user.id && account.role !== 'owner' && (owner || account.role === 'user') && <button className={account.banned ? '' : 'danger'} disabled={busy} onClick={() => ban('/management/users/' + account.id + '/ban', !account.banned)}>{account.banned ? '解除封禁' : '封禁账号'}</button>}

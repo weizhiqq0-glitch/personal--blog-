@@ -43,6 +43,16 @@ function CursorSwarm() {
   }, []);
   return <div ref={swarm} className="cursor-orbit" aria-hidden="true">{colors.map(color => <span key={color} style={{ '--color': color }}><svg viewBox="0 0 24 30"><path d="M12 2L22 23L12 19L2 23Z" fill={color} stroke="white" strokeWidth="1.5" strokeLinejoin="round" /></svg></span>)}</div>;
 }
+function useMouseAnimation() {
+  const [enabled, setEnabled] = useState(() => window.matchMedia('(min-width: 701px) and (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)').matches);
+  useEffect(() => {
+    const query = window.matchMedia('(min-width: 701px) and (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference)');
+    const update = () => setEnabled(query.matches);
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
+  return enabled;
+}
 function TypedText({ text, active, instant }) {
   const [count, setCount] = useState(0);
   useEffect(() => {
@@ -54,6 +64,7 @@ function TypedText({ text, active, instant }) {
   return <><span className="sr-only">{text}</span><span aria-hidden="true">{active ? instant ? text : text.slice(0, count) : ''}<i className="typing-caret" /></span></>;
 }
 function ExperienceRun({ reduced }) {
+  const mouseAnimation = useMouseAnimation();
   const [phase, setPhase] = useState('loading');
   const [shown, setShown] = useState(-1);
   const [instant, setInstant] = useState(reduced);
@@ -91,7 +102,7 @@ function ExperienceRun({ reduced }) {
     stage.current.style.setProperty('--pointer-y', event.clientY - box.top + 'px');
   }}>
     <div className="cursor-stage-top"><span>mowu / creative loading</span><button onClick={skip}>跳过动画 →</button></div>
-    {phase === 'loading' && !instant && <CursorSwarm />}
+    {phase === 'loading' && !instant && mouseAnimation && <CursorSwarm />}
     {phase === 'loading' && !instant ? <div className="cursor-loading" role="status"><span>一点灵感，正在汇合</span><h2>正在翻开这一页</h2><p>移动鼠标，让色彩跟着你。</p><div className="cursor-progress" /></div> : <div className="cursor-reveal-grid">{cards.map((card, index) => <article className={'cursor-reveal-card ' + (instant || shown >= index ? 'revealed' : '')} key={index} style={{ '--card-color': colors[index * 2] }}>
       <div className="selection-cursor"><Cursor color={colors[index * 2]} /><span>cursor {index + 1}</span></div>
       <span className="cursor-card-number">0{index + 1}</span><h2><TypedText text={card.title} active={instant || shown >= index} instant={instant} /></h2><p><TypedText text={card.text} active={instant || shown >= index} instant={instant} /></p>
@@ -109,13 +120,14 @@ export function CursorExperience() {
 }
 
 export function SiteLoader({ loading, onDone }) {
+  const mouseAnimation = useMouseAnimation();
   const [skipped, setSkipped] = useState(() => localStorage.getItem('mowu-reduce-animation') === 'yes' || window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   const target = useRef(null);
   useEffect(() => {
-    const timer = setTimeout(onDone, skipped ? 0 : loading ? 8000 : 1100);
+    const timer = setTimeout(onDone, skipped || !mouseAnimation ? 0 : loading ? 8000 : 1100);
     return () => clearTimeout(timer);
-  }, [loading, onDone, skipped]);
-  return skipped ? null : <div className="site-loader" role="status" ref={target} onPointerMove={event => {
+  }, [loading, onDone, skipped, mouseAnimation]);
+  return skipped || !mouseAnimation ? null : <div className="site-loader" role="status" ref={target} onPointerMove={event => {
     target.current.style.setProperty('--pointer-x', event.clientX + 'px');
     target.current.style.setProperty('--pointer-y', event.clientY + 'px');
   }}>
