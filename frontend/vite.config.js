@@ -6,6 +6,7 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     base: './',
+    ...(mode === 'localpreview' ? { define: { 'import.meta.env.VITE_API_URL': JSON.stringify('') } } : {}),
     build: { rollupOptions: { input: { main: 'index.html', pet: 'pet.html' } } },
     server: {
       proxy: {

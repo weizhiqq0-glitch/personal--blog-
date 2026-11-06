@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from './api';
 import { AuthDialog } from './AuthDialog';
 import { Icon } from './Icon';
@@ -11,6 +11,10 @@ import { DailyNews } from './DailyNews';
 import { Playground } from './Playground';
 import { Pet } from './Pet';
 import { usePageTitle } from './usePageTitle';
+import { UserSettings } from './UserSettings';
+import { LoginReports } from './LoginReports';
+import { CursorExperience, SiteLoader } from './CursorExperience';
+import { OwnerReportNotice } from './OwnerReportNotice';
 
 const date = value => new Date(value).toLocaleString('zh-CN');
 const initialDraft = { title: '', content: '', tags: '' };
@@ -24,7 +28,13 @@ export default function App() {
   const [token, setToken] = useState(() => sessionStorage.getItem('blog-token') || '');
   const [user, setUser] = useState(null);
   const [authMode, setAuthMode] = useState(null);
-  const [management, setManagement] = useState(false);
+  const [route, setRoute] = useState(() => window.location.hash.slice(1) || '/');
+  useEffect(() => {
+    const navigate = () => { setRoute(window.location.hash.slice(1) || '/'); window.scrollTo({ top: 0 }); };
+    window.addEventListener('hashchange', navigate);
+    return () => window.removeEventListener('hashchange', navigate);
+  }, []);
+  const home = !route.startsWith('/') || route === '/';
   const [detail, setDetail] = useState(null);
   const [comments, setComments] = useState([]);
   const [comment, setComment] = useState('');
@@ -32,6 +42,8 @@ export default function App() {
   const [draft, setDraft] = useState(initialDraft);
   const [editId, setEditId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [introDone, setIntroDone] = useState(false);
+  const finishIntro = useCallback(() => setIntroDone(true), []);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -74,7 +86,7 @@ export default function App() {
     try { await action(); } catch (e) { setError(e.message); }
     finally { lock.current = false; setBusy(false); }
   }
-  function closePanels() { setDetail(null); setEditing(false); setManagement(false); setAuthMode(null); setComment(''); }
+  function closePanels() { setDetail(null); setEditing(false); setAuthMode(null); setComment(''); }
   async function openArticle(id) {
     await run(async () => {
       const [article, list] = await Promise.all([api('/articles/' + id), api('/articles/' + id + '/comments')]);
@@ -82,6 +94,7 @@ export default function App() {
     });
   }
   function writeArticle(article = null) {
+    window.location.hash = '/';
     closePanels(); setEditId(article?.id || null);
     setDraft(article ? { title: article.title, content: article.content, tags: article.tags.join('，') } : initialDraft);
     setEditing(true);
@@ -128,16 +141,20 @@ export default function App() {
   const visible = articles.filter(a => [a.title, a.summary, ...a.tags].join(' ').toLowerCase().includes(keyword.trim().toLowerCase()));
   return (
     <main className={dark ? 'page dark' : 'page'}>
-      <div className="layout">
+      {!introDone && <SiteLoader loading={loading} onDone={finishIntro} />}
+      <div className={'layout' + (introDone ? ' startup-reveal' : '')} inert={!introDone}>
         <header className="topbar">
-          <a className="brand" href="#" onClick={closePanels}><span className="brand-mark">✦</span><span>mowu的小站</span></a>
+          <a className="brand" href="#/" onClick={closePanels}><span className="brand-mark">✦</span><span>mowu的小站</span></a>
           <nav>
-            <a href="#articles" onClick={closePanels}>文章</a>
-            <a className="feature-nav" href="#daily" onClick={closePanels}>每日60s</a>
-            <a className="feature-nav" href="#playground" onClick={closePanels}>游乐场</a>
-            {user ? <><span className="account">{user.username} · {roleNames[user.role]}</span>{admin && <button disabled={busy} onClick={() => writeArticle()}>写文章</button>}{canManage && <button disabled={busy} onClick={() => { closePanels(); setManagement(true); }}>账号管理</button>}<button disabled={busy} onClick={() => run(async () => {
+            <a href="#/" onClick={closePanels}>文章</a>
+            <a className="feature-nav" href="#/daily" onClick={closePanels}>每日60s</a>
+            <a className="feature-nav" href="#/playground" onClick={closePanels}>游乐场</a>
+            <a className="feature-nav" href="#/experience" onClick={closePanels}>动效体验</a>
+            <a href="#/settings" onClick={closePanels}>用户设置</a>
+            {user?.role === 'owner' && <a href="#/security" onClick={closePanels}>登录报备</a>}
+            {user ? <><span className="account">{user.username} · {roleNames[user.role]}</span>{admin && <button disabled={busy} onClick={() => writeArticle()}>写文章</button>}{canManage && <button disabled={busy} onClick={() => { closePanels(); window.location.hash = '/management'; }}>账号管理</button>}<button disabled={busy} onClick={() => run(async () => {
               try { await api('/auth/logout', { token, method: 'POST' }); } catch (e) { if (e.status !== 401) throw e; }
-              sessionStorage.removeItem('blog-token'); setToken(''); setUser(null); setEditing(false); setManagement(false); setMessage('已退出登录');
+              sessionStorage.removeItem('blog-token'); setToken(''); setUser(null); setEditing(false); setMessage('已退出登录');
             })}>退出</button></> : <><button className="nav-login" disabled={busy} onClick={() => showAuth('login')}><Icon name="user" size={16} />登录</button><button className="nav-register" disabled={busy} onClick={() => showAuth('register')}>加入小站 <span>↗</span></button></>}
             <button className="icon-button" aria-label={dark ? '切换日间模式' : '切换夜间模式'} onClick={() => choose(dark ? 'light' : 'dark')}><Icon name={dark ? 'sun' : 'moon'} /></button>
             <select className="theme-select" aria-label="主题模式" value={theme} onChange={e => choose(e.target.value)}><option value="auto">随时间切换</option><option value="light">始终日间</option><option value="dark">始终夜间</option></select>
@@ -145,15 +162,21 @@ export default function App() {
         </header>
         {error && !authMode && <div className="notice error" role="alert">{error}<button disabled={busy} onClick={() => run(refresh)}>重新连接</button></div>}
         {message && <div className="notice" role="status">{message}</div>}
+        <OwnerReportNotice user={user} route={route} />
         {user?.needsContactVerification && <div className="notice">账号需要先验证邮箱才能启用操作权限。<button onClick={() => showAuth('bind')}>绑定邮箱</button></div>}
-        <section className="hero-card">
+        {home && <><section className="hero-card">
           <div className="hero-copy"><p className="eyebrow"><span className="tiny-dot" /> 一隅小站 · 一点日常</p><h1>淡淡的，<br />就会<span className="heading-accent">顺顺的。</span></h1><p className="intro">收集生活的细碎，记录成长的轨迹。<br />愿这里的文字，也能陪你度过一小段时光。</p><a className="primary-button" href="#articles" onClick={closePanels}>翻开我的日常 <Icon name="arrow" size={17} /></a></div>
           <div className="hero-visual" aria-hidden="true"><div className="visual-label"><span className="tiny-dot" /> 此刻，刚刚好</div><div className="hero-sun" /><div className="hero-mountain mountain-back" /><div className="hero-mountain mountain-front" /><div className="hero-visual-caption"><span>把日子写成诗</span><span>✦</span></div></div>
         </section>
         <section className="stats-row"><div><strong>{stats.articles}</strong><span>文章</span></div><div><strong>{stats.comments}</strong><span>评论</span></div><div><strong>{stats.users}</strong><span>成员</span></div><div><strong>2026</strong><span>开始写作</span></div></section>
+        </>}
         <div ref={panel} className="panel-anchor" />
         {authMode && <AuthDialog key={authMode} mode={authMode} busy={busy} error={error} onClose={() => { setAuthMode(null); setError(''); }} onModeChange={showAuth} onSubmit={authenticate} initialEmail={authMode === 'bind' ? user?.contact?.value || '' : ''} />}
-        {management && canManage && <ManagementPanel user={user} onClose={() => setManagement(false)} />}
+        {route === '/management' && (canManage ? <ManagementPanel user={user} onClose={() => { window.location.hash = '/'; }} /> : <section className="article-card panel"><h1>账号管理</h1><p>请先登录具备管理权限的账号。</p></section>)}
+        {route === '/settings' && <UserSettings user={user} theme={theme} choose={choose} onSaved={text => { sessionStorage.removeItem('blog-token'); setToken(''); setUser(null); setMessage(text); showAuth('login'); }} />}
+        {route === '/security' && (user?.role === 'owner' ? <LoginReports /> : <section className="article-card panel"><h1>登录报备</h1><p>请先登录站主账号。</p></section>)}
+        {route === '/experience' && <CursorExperience />}
+        {home && <>
         {editing && admin && <section className="article-card panel"><h2>{editId ? '编辑文章' : '发布新文章'}</h2><form onSubmit={saveArticle}>
           <label>标题<input value={draft.title} onChange={e => setDraft({ ...draft, title: e.target.value })} required maxLength={120} /></label>
           <label>标签<input value={draft.tags} onChange={e => setDraft({ ...draft, tags: e.target.value })} placeholder="用逗号分隔，最多8个" /></label>
@@ -174,12 +197,13 @@ export default function App() {
         <section id="articles"><div className="section-heading"><div><p className="eyebrow">最新记录</p><h2>最近写了什么</h2></div><label className="search"><Icon name="search" size={18} /><input aria-label="搜索文章或标签" value={keyword} onChange={e => setKeyword(e.target.value)} placeholder="搜索文章或标签" /></label></div>
           {loading ? <p className="empty">正在加载文章…</p> : <><div className="article-grid">{visible.map(a => <article key={a.id} className="article-card"><div className="article-icon"><Icon name="book" size={24} /></div><p className="article-date">{date(a.created_at)} · {a.comment_count}条评论</p><h3>{a.title}</h3><p className="article-summary">{a.summary}</p><div className="article-footer"><div className="tags">{a.tags.map(t => <span key={t}>#{t}</span>)}</div><button className="read-button" disabled={busy} onClick={() => openArticle(a.id)}>阅读 →</button></div></article>)}</div>{!visible.length && !error && <div className="empty"><span className="empty-icon"><Icon name="book" size={32} /></span><h3>{keyword ? '没有找到这篇故事' : '故事，从这里开始'}</h3><p>{keyword ? '换个词试试，或许会有新的发现。' : '第一篇文章正在酝酿，值得记录的日子都不必着急。'}</p>{admin && !keyword && <button className="read-button" onClick={() => writeArticle()}>写下第一篇文章 →</button>}</div>}</>}
         </section>
-        <DailyNews />
-        <Playground />
+        </>}
+        {route === '/daily' && <DailyNews />}
+        {route === '/playground' && <Playground />}
         <SiteStatus />
         <footer>© {year} mowu的小站 · 用心记录每一天</footer>
       </div>
-      <Pet hidden={!!authMode} />
+      <Pet hidden={!!authMode || ['/experience', '/settings', '/security', '/management'].includes(route)} />
     </main>
   );
 }

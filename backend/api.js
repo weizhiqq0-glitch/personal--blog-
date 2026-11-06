@@ -10,7 +10,7 @@ const { createEmailSender } = require('./email');
 function createApi(options) {
   const { hashPassword, verifyPassword } = options.passwords || security;
   const db = options.database;
-  const accounts = createAccounts({ db, ownerEntryHash: options.ownerEntryHash || process.env.OWNER_ENTRY_CODE_HASH, mailPolicy: options.mailPolicy, passwords: { hashPassword, verifyPassword }, emailSender: options.emailSender || createEmailSender(options.emailConfig) });
+  const accounts = createAccounts({ db, localDeviceEnrollment: options.localDeviceEnrollment === true, ownerDeviceSetupHash: options.ownerDeviceSetupHash, ownerEntryHash: options.ownerEntryHash || process.env.OWNER_ENTRY_CODE_HASH, mailPolicy: options.mailPolicy, passwords: { hashPassword, verifyPassword }, emailSender: options.emailSender || createEmailSender(options.emailConfig) });
   const app = express();
   app.locals.db = db;
   app.disable('x-powered-by');
@@ -19,8 +19,13 @@ function createApi(options) {
   const origins = (options.origins || process.env.CORS_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173').split(',').map(s => s.trim());
   app.use(cors({ exposedHeaders: ['X-Visitor-Token'], origin(origin, done) { done(null, !origin || origins.includes(origin)); } }));
   app.use(express.json({ limit: '256kb' }));
+  let ownerMigration;
   app.use(async (req, res, next) => {
     await db.ready;
+    if (options.initialOwnerName) {
+      if (!ownerMigration) ownerMigration = require('./owner-name-migration').migrateOwnerName(db, options.initialOwnerName).catch(error => { ownerMigration = undefined; throw error; });
+      await ownerMigration;
+    }
     res.set('Cache-Control', 'no-store');
     res.set('X-Content-Type-Options', 'nosniff');
     const token = req.get('authorization')?.replace(/^Bearer /, '');
@@ -62,7 +67,7 @@ function createApi(options) {
     res.status(204).end();
   });
   app.use('/api/auth', accounts.authRouter(authLimit, issueSession));
-  app.use('/api/management', accounts.managementRouter());
+  app.use('/api/management', accounts.managementRouter(authLimit));
   app.get('/api/stats', async (req, res) => res.json({ articles: (await db.prepare('SELECT COUNT(*) AS n FROM articles').get()).n, comments: (await db.prepare('SELECT COUNT(*) AS n FROM comments').get()).n, users: (await db.prepare('SELECT COUNT(*) AS n FROM users').get()).n }));
   const articleSelect = 'SELECT a.*,u.username AS author,(SELECT COUNT(*) FROM comments c WHERE c.article_id=a.id) AS comment_count FROM articles a JOIN users u ON u.id=a.author_id';
   const serialize = article => ({ ...article, tags: JSON.parse(article.tags) });

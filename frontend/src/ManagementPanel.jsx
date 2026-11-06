@@ -51,7 +51,7 @@ export function ManagementPanel({ user, onClose }) {
     update(path, { banned, reason });
   }
   return <section className="article-card panel management-panel" aria-label="账号管理">
-    <div className="section-heading"><div><p className="eyebrow">{owner ? '站主控制台' : '站点管理'}</p><h2>账号与访问管理</h2></div><button onClick={onClose}>关闭</button></div>
+    <div className="section-heading"><div><p className="eyebrow">{owner ? '站主控制台' : '站点管理'}</p><h2>账号与访问管理</h2></div><button onClick={onClose}>返回首页</button></div>
     {error && <div className="notice error" role="alert">{error}</div>}{message && <div className="notice" role="status">{message}</div>}
     {owner && <EmailBudget />}
     {listUsers && <><h3>账号</h3><p className="muted">站主可授权或限制其他账号；管理员只能封禁或解封普通用户。</p>

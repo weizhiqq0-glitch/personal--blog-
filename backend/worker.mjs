@@ -15,6 +15,8 @@ if (env.DATABASE_URL) {
     emailConfig: env,
     trustCloudflare: true,
     ownerEntryHash: env.OWNER_ENTRY_CODE_HASH,
+    ownerDeviceSetupHash: env.OWNER_DEVICE_SETUP_HASH,
+    initialOwnerName: 'mowu',
   });
   app.listen(3000);
 }

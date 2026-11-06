@@ -5,7 +5,7 @@ const { PERMISSIONS, effectivePermissions, publicUser } = require('./permissions
 const { createVerification, normalizeContact } = require('./verification');
 
 const { createMailBudget } = require('./mail-budget');
-function createAccounts({ db, passwords, emailSender, mailPolicy, ownerEntryHash }) {
+function createAccounts({ db, passwords, emailSender, mailPolicy, ownerEntryHash, ownerDeviceSetupHash, localDeviceEnrollment = false }) {
   const budget = createMailBudget(db, mailPolicy);
   const verification = createVerification(db, emailSender, budget);
   let loginReady;
@@ -13,12 +13,36 @@ function createAccounts({ db, passwords, emailSender, mailPolicy, ownerEntryHash
     if (!loginReady) loginReady = Promise.resolve(db.ready).then(() => db.prepare('CREATE TABLE IF NOT EXISTS account_last_login(user_id INTEGER PRIMARY KEY,logged_at BIGINT NOT NULL,device TEXT NOT NULL)').run()).catch(error => { loginReady = undefined; throw error; });
     return loginReady;
   }
+  let securityReady;
+  function securityTables() {
+    if (!securityReady) securityReady = Promise.resolve(db.ready).then(async () => {
+      await db.prepare('CREATE TABLE IF NOT EXISTS owner_trusted_device(user_id INTEGER PRIMARY KEY,device_hash TEXT NOT NULL,created_at BIGINT NOT NULL)').run();
+      await db.prepare('CREATE TABLE IF NOT EXISTS owner_login_reports(event_key TEXT PRIMARY KEY,user_id INTEGER NOT NULL,logged_at BIGINT NOT NULL,device TEXT NOT NULL)').run();
+    }).catch(error => { securityReady = undefined; throw error; });
+    return securityReady;
+  }
+  async function trustedDevice(req, user = req.user) {
+    await securityTables();
+    const secret = req.get('x-owner-device');
+    if (!/^[a-f0-9]{64}$/.test(secret || '')) return false;
+    const row = await db.prepare('SELECT device_hash FROM owner_trusted_device WHERE user_id=?').get(user.id);
+    return !!row && timingSafeEqual(Buffer.from(row.device_hash, 'hex'), Buffer.from(tokenHash(secret), 'hex'));
+  }
+  function canEnrollLocally(req) {
+    return localDeviceEnrollment && ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
+  }
   async function recordLogin(req, user) {
     await loginTable();
     const ua = req.get('user-agent') || '';
     const browser = /Edg\//.test(ua) ? 'Edge' : /Firefox\//.test(ua) ? 'Firefox' : /Chrome\//.test(ua) ? 'Chrome' : /Safari\//.test(ua) ? 'Safari' : '未知浏览器';
     const system = /Android/.test(ua) ? 'Android' : /iPhone|iPad/.test(ua) ? 'iOS/iPadOS' : /Windows/.test(ua) ? 'Windows' : /Macintosh/.test(ua) ? 'macOS' : /Linux/.test(ua) ? 'Linux' : '未知系统';
     await db.prepare('INSERT INTO account_last_login(user_id,logged_at,device) VALUES (?,?,?) ON CONFLICT(user_id) DO UPDATE SET logged_at=excluded.logged_at,device=excluded.device').run(user.id, Date.now(), system + ' · ' + browser);
+    if (user.role === 'owner') await securityTables();
+    const bound = user.role === 'owner' && await db.prepare('SELECT user_id FROM owner_trusted_device WHERE user_id=?').get(user.id);
+    if (bound && !await trustedDevice(req, user)) {
+      await db.prepare('INSERT INTO owner_login_reports(event_key,user_id,logged_at,device) VALUES (?,?,?,?)').run(randomBytes(16).toString('hex'), user.id, Date.now(), system + ' · ' + browser);
+      await db.prepare('DELETE FROM owner_login_reports WHERE logged_at<?').run(Date.now() - 90 * 86400_000);
+    }
   }
   const fail = (res, status, error) => res.status(status).json({ error });
   const signedIn = (req, res, next) => req.user ? next() : fail(res, 401, '请先登录');
@@ -121,6 +145,21 @@ function createAccounts({ db, passwords, emailSender, mailPolicy, ownerEntryHash
       res.json(await issueSession(user));
     });
     router.get('/me', signedIn, (req, res) => res.json(publicUser(req.user)));
+    router.patch('/settings', requireVerified, authLimit, async (req, res) => {
+      const { currentPassword, username, newPassword } = req.body || {};
+      if (typeof currentPassword !== 'string' || !currentPassword || currentPassword.length > 128 || !await passwords.verifyPassword(currentPassword, req.user.password_hash)) return fail(res, 401, '当前密码不正确');
+      const name = username === undefined ? req.user.username : username;
+      if (!validateCredentials(name, newPassword === undefined ? 'check123' : newPassword)) return fail(res, 400, '用户名须为2—32位汉字、字母、数字、下划线或短横线；新密码须为6—14位');
+      const hash = newPassword === undefined ? req.user.password_hash : await passwords.hashPassword(newPassword);
+      try {
+        await db.prepare('UPDATE users SET username=?,password_hash=? WHERE id=?').run(name, hash, req.user.id);
+      } catch (error) {
+        if (error.code === '23505' || error.message.includes('UNIQUE')) return fail(res, 409, '用户名已被使用');
+        throw error;
+      }
+      await db.prepare('DELETE FROM sessions WHERE user_id=?').run(req.user.id);
+      res.json({ message: '设置已保存，所有设备的旧登录已退出，请重新登录' });
+    });
     router.post('/logout', signedIn, async (req, res) => {
       await db.prepare('DELETE FROM sessions WHERE token_hash=?').run(tokenHash(req.get('authorization').slice(7)));
       res.status(204).end();
@@ -151,11 +190,36 @@ function createAccounts({ db, passwords, emailSender, mailPolicy, ownerEntryHash
     });
     return router;
   }
-  function managementRouter() {
+  function managementRouter(authLimit) {
     const router = express.Router();
     router.param('id', (req, res, next, id) => /^[1-9]\d*$/.test(id) && Number(id) <= 2147483647 ? next() : fail(res, 404, '账号不存在'));
     router.use(requireVerified);
     const canList = (req, res, next) => req.user.role === 'owner' || effectivePermissions(req.user).includes('user.ban') ? next() : fail(res, 403, '没有账号管理权限');
+    router.get('/device-status', ownerOnly, async (req, res) => {
+      await securityTables();
+      const bound = !!await db.prepare('SELECT user_id FROM owner_trusted_device WHERE user_id=?').get(req.user.id);
+      const local = canEnrollLocally(req);
+      res.json({ bound, trusted: await trustedDevice(req), enrollmentAvailable: !bound && (local || /^[a-f0-9]{64}$/.test(ownerDeviceSetupHash || '')), requiresSetupCode: !local });
+    });
+    router.post('/trusted-device', ownerOnly, authLimit, async (req, res) => {
+      const code = req.body?.setupCode;
+      const setupValid = /^[a-f0-9]{64}$/.test(ownerDeviceSetupHash || '') && typeof code === 'string' && code.length <= 128 && timingSafeEqual(Buffer.from(ownerDeviceSetupHash, 'hex'), Buffer.from(tokenHash(code), 'hex'));
+      if (!canEnrollLocally(req) && !setupValid) return fail(res, 403, '设备绑定授权码不正确或尚未配置');
+      const { currentPassword } = req.body || {};
+      if (typeof currentPassword !== 'string' || !currentPassword || currentPassword.length > 128 || !await passwords.verifyPassword(currentPassword, req.user.password_hash)) return fail(res, 401, '当前密码不正确');
+      const secret = req.get('x-owner-device');
+      if (!/^[a-f0-9]{64}$/.test(secret || '')) return fail(res, 400, '设备凭证无效');
+      await securityTables();
+      const result = await db.prepare('INSERT INTO owner_trusted_device(user_id,device_hash,created_at) VALUES (?,?,?) ON CONFLICT(user_id) DO NOTHING').run(req.user.id, tokenHash(secret), Date.now());
+      if (!result.changes) return fail(res, 409, '已绑定设备，不能通过其他浏览器替换');
+      res.json({ message: '当前浏览器已绑定为唯一报备查看设备' });
+    });
+    router.get('/login-reports', ownerOnly, async (req, res) => {
+      if (!await trustedDevice(req)) return fail(res, 403, '只有已绑定的本机浏览器能查看登录报备');
+      await db.prepare('DELETE FROM owner_login_reports WHERE logged_at<?').run(Date.now() - 90 * 86400_000);
+      const records = await db.prepare('SELECT event_key,logged_at,device FROM owner_login_reports WHERE user_id=? ORDER BY logged_at DESC LIMIT 100').all(req.user.id);
+      res.json(records.map(record => ({ id: record.event_key, time: Number(record.logged_at), device: record.device })));
+    });
     router.get('/email-budget', ownerOnly, async (req, res) => res.json(await budget.status()));
     router.patch('/email-budget', ownerOnly, async (req, res) => {
       const result = await budget.calibrate(req.body?.remaining, req.body?.resetAt);
