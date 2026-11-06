@@ -29,6 +29,7 @@ try {
         if ($LASTEXITCODE -ne 0) { throw '安装依赖失败。请截图上方错误。' }
     }
     Write-Host '正在验证 Cloudflare 部署包……'
+    & (Join-Path $PSScriptRoot 'backup-version.ps1')
     npm.cmd run worker:check
     if ($LASTEXITCODE -ne 0) { throw '部署包检查失败，尚未发布。请截图上方错误。' }
     Write-Host ''

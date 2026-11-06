@@ -8,6 +8,9 @@ try {
     if ($CheckOnly) { Write-Host '检查通过：启动文件、中文编码、项目路径和 Git 均正常。'; exit 0 }
     Write-Host '正在保存博客改动……'
     & (Join-Path $PSScriptRoot 'check-public.ps1')
+    git rev-parse --verify refs/remotes/origin/main 2>$null | Out-Null
+    $previous = if ($LASTEXITCODE -eq 0) { 'refs/remotes/origin/main' } else { 'HEAD' }
+    & (Join-Path $PSScriptRoot 'backup-version.ps1') -Revision $previous
     git add --all
     if ($LASTEXITCODE -ne 0) { throw '保存改动失败。' }
     & (Join-Path $PSScriptRoot 'check-public.ps1') -Staged

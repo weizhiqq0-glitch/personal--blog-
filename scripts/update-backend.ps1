@@ -19,6 +19,7 @@ try {
         if ($LASTEXITCODE -ne 0) { throw '依赖安装失败。' }
     }
     & (Join-Path $PSScriptRoot 'check-public.ps1')
+    & (Join-Path $PSScriptRoot 'backup-version.ps1')
     npm.cmd run worker:deploy
     if ($LASTEXITCODE -ne 0) { throw '部署失败，请保留错误信息；Cloudflare 授权过期时请重新授权。' }
     Write-Host '后端更新成功。前端改动请另运行发布博客。' -ForegroundColor Green
