@@ -32,6 +32,11 @@ function createAvatars({ db, requireVerified, authLimit }) {
     if (!ready) ready = Promise.resolve(db.ready).then(() => db.prepare('CREATE TABLE IF NOT EXISTS account_avatars(user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,png TEXT NOT NULL,updated_at BIGINT NOT NULL)').run()).catch(error => { ready = undefined; throw error; });
     return ready;
   }
+  router.siteProfile = async () => {
+    await init();
+    const owner = await db.prepare("SELECT u.id,u.username,a.updated_at AS avatar_version FROM users u LEFT JOIN account_avatars a ON a.user_id=u.id WHERE u.role='owner' ORDER BY u.id LIMIT 1").get();
+    return owner ? { id: owner.id, username: owner.username, avatarVersion: Number(owner.avatar_version || 0) } : { id: null, username: 'mowu', avatarVersion: 0 };
+  };
   router.put('/me', requireVerified, authLimit, async (req, res) => {
     const bytes = validateAvatar(req.body?.image);
     if (!bytes) return res.status(400).json({ error: '头像须为不超过256×256、96KB的静态PNG，请重新选择图片' });

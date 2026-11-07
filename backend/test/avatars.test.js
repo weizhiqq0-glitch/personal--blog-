@@ -25,6 +25,8 @@ for (const engine of ['sqlite', 'postgres']) test(engine + '：头像只修改�
   const call = (route, method = 'GET', token, body) => fetch(base + route, { method, headers: { ...(token ? { Authorization: 'Bearer ' + token } : {}), ...(body ? { 'Content-Type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined });
   async function login(username) { return (await (await call('/auth/login', 'POST', null, { username, password: 'Fixture123' })).json()).token; }
   try {
+    const initialProfile = await (await call('/site-profile')).json();
+    assert.deepEqual(initialProfile, { id: 1, username: 'owner', avatarVersion: 0 });
     const token = await login('normal'), unverified = await login('unverified');
     assert.equal((await call('/avatars/me', 'PUT', null, { image })).status, 401);
     assert.equal((await call('/avatars/me', 'PUT', unverified, { image })).status, 403);
@@ -39,7 +41,17 @@ for (const engine of ['sqlite', 'postgres']) test(engine + '：头像只修改�
     assert.equal((await call('/avatars/me', 'DELETE', token)).status, 200);
     assert.equal((await call('/avatars/2')).status, 404);
     const profile = await (await call('/site-profile')).json();
-    assert.deepEqual(Object.keys(profile).sort(), ['id', 'username']);
+    assert.deepEqual(Object.keys(profile).sort(), ['avatarVersion', 'id', 'username']);
+    const ownerToken = await login('owner');
+    const upload = await (await call('/avatars/me', 'PUT', ownerToken, { image })).json();
+    assert.ok(upload.version > 0);
+    assert.equal((await (await call('/site-profile')).json()).avatarVersion, upload.version);
+    await db.prepare('UPDATE account_avatars SET updated_at=? WHERE user_id=?').run(1, 1);
+    const replaced = await (await call('/avatars/me', 'PUT', ownerToken, { image })).json();
+    assert.ok(replaced.version > 1);
+    assert.equal((await (await call('/site-profile')).json()).avatarVersion, replaced.version);
+    assert.equal((await call('/avatars/me', 'DELETE', ownerToken)).status, 200);
+    assert.equal((await (await call('/site-profile')).json()).avatarVersion, 0);
     await db.prepare("INSERT INTO users(username,password_hash,role,verified_at,contact_value) VALUES (?,?,?,?,?)").run('admin', 'fixture', 'admin', '2026-01-01', 'admin@private.test');
     const directory = await (await call('/members')).json();
     assert.deepEqual(directory.members.map(member => member.role), ['owner', 'admin', 'user']);

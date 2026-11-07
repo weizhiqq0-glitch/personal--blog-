@@ -23,6 +23,7 @@ jobs:
       - run: npm run build
         env:
           VITE_API_URL: ${{ vars.VITE_API_GATEWAY_URL || 'https://mowu-blog-api-gateway.pages.dev' }}
+          VITE_FOLIA_URL: https://mowu-folia.mowu-weizhi.workers.dev
         working-directory: frontend
       - uses: actions/upload-pages-artifact@v3
         with:

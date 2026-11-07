@@ -68,7 +68,8 @@ function createApi(options) {
     res.status(204).end();
   });
   app.use('/api/auth', accounts.authRouter(authLimit, issueSession));
-  app.use('/api/avatars', require('./avatars').createAvatars({ db, requireVerified: accounts.requireVerified, authLimit }));
+  const avatars = require('./avatars').createAvatars({ db, requireVerified: accounts.requireVerified, authLimit });
+  app.use('/api/avatars', avatars);
   app.use('/api/management', accounts.requireStaff);
   const community = require('./community-admin').createCommunityAdmin({ db, requireVerified: accounts.requireVerified, requireStaff: accounts.requireStaff, requirePermission: accounts.requirePermission });
   app.use('/api', community);
@@ -78,9 +79,34 @@ function createApi(options) {
   app.use('/api/management', support.managementRouter);
   app.use('/api/content', require('./site-content').createSiteContent({ db, requireVerified: accounts.requireVerified, requirePermission: accounts.requirePermission, authLimit }));
   app.get('/api/stats', async (req, res) => res.json({ articles: (await db.prepare('SELECT COUNT(*) AS n FROM articles').get()).n, comments: (await db.prepare('SELECT COUNT(*) AS n FROM comments').get()).n, users: (await db.prepare('SELECT COUNT(*) AS n FROM users').get()).n }));
+  const githubProjects = require('./github-projects').createGithubProjects();
+  const githubBrowser = require('./github-browser').createGithubBrowser();
+  const githubRequests = new Map();
+  function githubLimit(req, res, next) {
+    const now = Date.now();
+    for (const [key, bucket] of githubRequests) if (bucket.until <= now) githubRequests.delete(key);
+    const key = req.mailIp;
+    if (!githubRequests.has(key) && githubRequests.size >= 2000) return fail(res, 429, '查询人数较多，请稍后重试');
+    const bucket = githubRequests.get(key) || { count: 0, until: now + 600000 };
+    githubRequests.set(key, bucket);
+    if (++bucket.count > 30) return fail(res, 429, '查询过于频繁，请10分钟后重试');
+    next();
+  }
+  for (const [path, lookup] of [
+    ['/api/github-search', req => githubBrowser.search(req.query.q, Number(req.query.page || 1))],
+    ['/api/github-repo', req => githubBrowser.repo(req.query.name)],
+  ]) app.get(path, githubLimit, async (req, res) => {
+    try { res.json(await lookup(req)); }
+    catch (error) { fail(res, [400,404,429].includes(error.status) ? error.status : 503, error.status ? error.message : 'GitHub 暂时无法连接，请稍后重试。'); }
+  });
+  app.get('/api/github-projects', async (req, res) => {
+    const category = req.query.category || 'hot';
+    const data = await githubProjects(category);
+    if (!data) return res.status(400).json({ error: '项目分类不存在' });
+    res.json(data);
+  });
   app.get('/api/site-profile', async (req, res) => {
-    const owner = await db.prepare("SELECT id,username FROM users WHERE role='owner'").get();
-    res.json(owner ? { id: owner.id, username: owner.username } : { id: null, username: 'mowu' });
+    res.json(await avatars.siteProfile());
   });
   app.get('/api/members', async (req, res) => {
     const page = Number(req.query.page || 1);

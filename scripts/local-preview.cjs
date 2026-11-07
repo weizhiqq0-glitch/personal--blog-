@@ -31,8 +31,16 @@ async function main() {
   const env = { ...process.env, BLOG_BACKEND_URL: 'http://127.0.0.1:3015', VITE_API_URL: '' };
   // Vite's development-only override prevents .env.local from pointing at a live API.
   const front = spawn(process.execPath, [vite, '--host', '127.0.0.1', '--port', '5189', '--strictPort', '--mode', 'localpreview'], { cwd: path.join(root, 'frontend'), env, stdio: 'inherit', windowsHide: true });
-  front.on('exit', () => server.close(() => { database.close(); process.exit(); }));
+  let folia;
+  if (fs.existsSync(path.join(root,'integrations/folia/source/node_modules/vite/bin/vite.js'))) {
+    const alreadyRunning = await fetch('http://127.0.0.1:5191/', { signal: AbortSignal.timeout(1000) }).then(response=>response.ok).catch(()=>false);
+    if (!alreadyRunning) {
+      folia = spawn(process.execPath,[path.join(root,'scripts/folia-preview.cjs')],{cwd:root,env:process.env,stdio:'inherit',windowsHide:true});
+      folia.on('error',error=>console.error('Folia 启动失败：'+error.message));
+    }
+  } else console.log('Folia 尚未安装；需要音乐播放器时请运行 tools/启动Folia.cmd。');
+  front.on('exit', () => { folia?.kill(); server.close(() => { database.close(); process.exit(); }); });
   front.on('error', error => { console.error(error.message); server.close(); });
-  for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => { front.kill(); server.close(() => { database.close(); process.exit(); }); });
+  for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => { front.kill(); folia?.kill(); server.close(() => { database.close(); process.exit(); }); });
 }
 main().catch(error => { console.error(error.message); process.exitCode = 1; });

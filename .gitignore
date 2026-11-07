@@ -34,3 +34,6 @@ private/
 *.7z
 Thumbs.db
 .DS_Store
+
+# Separately pinned upstream integration sources (restored by integration scripts)
+integrations/folia/source/

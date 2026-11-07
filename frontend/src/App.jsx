@@ -2,6 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from './api';
 import { AuthDialog } from './AuthDialog';
 import { Icon } from './Icon';
+import { BlinkStar } from './BlinkStar';
+import { useBlinkFavicon } from './useBlinkFavicon';
+import { GithubProjects } from './GithubProjects';
+import { GithubSearch, GithubRepo } from './GithubSearch';
+import { FoliaPage } from './FoliaPage';
+import { Toolbox } from './Toolbox';
 import { AdminDashboard } from './AdminDashboard';
 import { Members } from './Members';
 import { Feedback } from './Feedback';
@@ -31,6 +37,7 @@ const date = value => new Date(value).toLocaleString('zh-CN');
 export default function App() {
   usePageVisit();
   usePageTitle();
+  useBlinkFavicon();
   const { dark, theme, choose } = useTheme();
   const [keyword, setKeyword] = useState('');
   const [articles, setArticles] = useState([]);
@@ -144,13 +151,13 @@ export default function App() {
       {!introDone && <SiteLoader loading={loading} onDone={finishIntro} />}
       <div className={'layout' + (introDone ? ' startup-reveal' : '')} inert={!introDone}>
         <header className="topbar">
-          <a className="brand" href="#/" onClick={closePanels}><span className="brand-mark">✦</span><span>mowu的小站</span></a>
+          <a className="brand" href="#/" onClick={closePanels}><span className="brand-mark"><BlinkStar /></span><span>mowu的小站</span></a>
           <nav>
             <a href="#/" onClick={closePanels}>首页</a><a href="#/archive" onClick={closePanels}>文章归档</a>
             <a className="feature-nav" href="#/daily" onClick={closePanels}>每日60s</a>
             <a className="feature-nav" href="#/playground" onClick={closePanels}>游乐场</a>
             <a className="feature-nav" href="#/experience" onClick={closePanels}>动效体验</a>
-            <a href="#/members" onClick={closePanels}>站员</a><a href="#/feedback" onClick={closePanels}>问题反馈</a>
+            <a className="feature-nav" href="#/github" onClick={closePanels}>GitHub</a><a href="#/members" onClick={closePanels}>站员</a><a href="#/feedback" onClick={closePanels}>问题反馈</a>
             {user ? <><span className="account"><Avatar id={user.id} name={user.username} version={user.avatarVersion} />{user.username} · {roleNames[user.role]}</span>{staff && <a className="admin-entry" href="#/admin" onClick={closePanels}>管理后台 ↗</a>}<button disabled={busy} onClick={() => run(async () => {
               try { await api('/auth/logout', { token, method: 'POST' }); } catch (e) { if (e.status !== 401) throw e; }
               sessionStorage.removeItem('blog-token'); setToken(''); setUser(null); setMessage('已退出登录');
@@ -171,6 +178,11 @@ export default function App() {
         <div ref={panel} className="panel-anchor" />
         {authMode && <AuthDialog key={authMode} mode={authMode} busy={busy} error={error} onClose={() => { setAuthMode(null); setError(''); }} onModeChange={showAuth} onSubmit={authenticate} initialEmail={authMode === 'bind' ? user?.contact?.value || '' : ''} />}
         {route === '/settings' && <UserSettings user={user} onAvatarUpdated={version => setUser(current => ({ ...current, avatarVersion: version }))} theme={theme} choose={choose} onSaved={text => { sessionStorage.removeItem('blog-token'); setToken(''); setUser(null); setMessage(text); showAuth('login'); }} />}
+        {route === '/github' && <GithubProjects />}
+        {route === '/github-search' && <GithubSearch />}
+        {route.startsWith('/github-repo/') && <GithubRepo key={route} name={route.slice('/github-repo/'.length)} />}
+        {route === '/folia' && <FoliaPage />}
+        {route === '/tools' && <Toolbox />}
         {route === '/experience' && <CursorExperience />}
         {route === '/members' && <Members user={user} />}
         {route === '/feedback' && <Feedback key={user?.id || 'guest'} user={user} onLogin={() => showAuth('login')} />}
