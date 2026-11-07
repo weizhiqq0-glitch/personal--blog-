@@ -4,7 +4,7 @@ export function Pet({ hidden }) {
   const [status, setStatus] = useState('loading');
   const frame = useRef(null);
   useEffect(() => {
-    function receive(event) { if (event.origin === location.origin && event.source === frame.current?.contentWindow && ['ready', 'error'].includes(event.data?.petStatus)) setStatus(event.data.petStatus); }
+    function receive(event) { if (event.origin === location.origin && event.source === frame.current?.contentWindow && event.data?.petAction === 'search') window.location.hash = '/search'; if (event.origin === location.origin && event.source === frame.current?.contentWindow && ['ready', 'error'].includes(event.data?.petStatus)) setStatus(event.data.petStatus); }
     window.addEventListener('message', receive);
     return () => window.removeEventListener('message', receive);
   }, []);

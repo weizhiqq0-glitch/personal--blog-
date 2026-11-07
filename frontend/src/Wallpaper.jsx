@@ -1,3 +1,5 @@
+import { ImagePicker } from './ImagePicker';
+import './SiteSearch.css';
 import { useEffect, useRef, useState } from 'react';
 
 export function Wallpaper({ wallpaper }) {
@@ -36,8 +38,8 @@ export function WallpaperSettings({ wallpaper }) {
     setBusy(true); setMessage('');
     try { await action(); } catch (e) { setMessage(e.message); } finally { setBusy(false); }
   }
-  async function select(event) {
-    const file = event.target.files?.[0]; if (!file) return;
+  async function select(file) {
+    if (!file) return;
     run(async () => {
       if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 10 * 1024 * 1024) throw Error('请选择10MB以内的 JPG、PNG 或 WebP 图片');
       const bitmap = await createImageBitmap(file); let image;
@@ -54,7 +56,7 @@ export function WallpaperSettings({ wallpaper }) {
   }
   function saveUrl(event) { event.preventDefault(); run(async () => { await wallpaper.save({ kind, url }); setMessage('全站背景已发布，其他访客刷新网页后即可看到'); }); }
   return <section className="article-card panel settings-page"><p className="eyebrow">SITE APPEARANCE</p><h1>全站背景</h1><p className="muted">由站主和有权限的管理员统一设置，所有访客看到同一背景。</p>
-    <label>上传背景图片<input type="file" accept="image/jpeg,image/png,image/webp" onChange={select} disabled={busy} /></label><p className="muted">选择10MB以内图片，自动压缩后保存到本站。背景图片为公开内容。</p>
+    <ImagePicker label="上传背景图片（选择后发布）" onSelect={select} disabled={busy} /><p className="muted">选择10MB以内图片，自动压缩后保存到本站。背景图片为公开内容。</p>
     <form onSubmit={saveUrl}><label>直链类型<select value={kind} onChange={e => setKind(e.target.value)}><option value="image">图片</option><option value="video">动态视频</option></select></label><label>HTTPS 图片或视频直链<input type="url" value={url} onChange={e => setUrl(e.target.value)} required maxLength={2000} placeholder="https://…" /></label><p className="muted">视频使用可公开播放的 MP4/WebM 直链。请使用有权公开的素材，链接不要包含私密密钥。</p><button className="primary-button" disabled={busy}>发布全站背景</button></form>
     <p className="muted">Wallpaper Engine 的图片可以上传；视频素材可托管后填写直链。Steam 创意工坊链接、场景包无法直接运行。</p>
     {wallpaper.source && <><p>当前背景：{wallpaper.value.kind === 'video' ? '动态视频' : '图片'}</p><div className="background-preview">{wallpaper.value.kind === 'video' ? <video src={wallpaper.source} controls muted preload="metadata" /> : <img src={wallpaper.source} alt="当前全站背景预览" />}</div></>}

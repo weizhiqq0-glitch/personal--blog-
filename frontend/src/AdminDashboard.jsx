@@ -1,3 +1,6 @@
+import { ImagePicker } from './ImagePicker';
+import { resizeImage } from './resizeImage';
+import { RolePermissions } from './RolePermissions';
 import { useCallback, useEffect, useState } from 'react';
 import { api } from './api';
 import { ManagementPanel } from './ManagementPanel';
@@ -14,6 +17,8 @@ import { Avatar } from './Avatar';
 function AdminArticles() {
   const [articles, setArticles] = useState([]);
   const [draft, setDraft] = useState(null);
+  const [imageBusy,setImageBusy]=useState(false);
+  async function addImage(file){setImageBusy(true);try{const result=await api('/content-media',{method:'POST',body:JSON.stringify({image:await resizeImage(file)})});setDraft(current=>({...current,content:current.content+'\n![图片](/api'+result.path+')\n'}));}finally{setImageBusy(false);}}
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const load = useCallback(async () => setArticles(await api('/articles')), []);
@@ -29,7 +34,7 @@ function AdminArticles() {
   function remove(id) { if (window.confirm('删除文章及其评论？此操作不可撤销。')) run(async () => { await api('/articles/' + id, { method: 'DELETE' }); setMessage('文章已删除'); await load(); }); }
   return <><div className="admin-section-heading"><h2>文章管理</h2><button className="primary-button" disabled={busy} onClick={() => setDraft({ title: '', content: '', tags: '' })}>＋ 发布文章</button></div>
     {message && <p className="notice" role="status">{message}</p>}
-    {draft && <form onSubmit={save} className="admin-editor"><h3>{draft.id ? '编辑文章' : '新建文章'}</h3><label>标题<input value={draft.title} maxLength={120} required onChange={e => setDraft({ ...draft, title: e.target.value })} /></label><label>标签<input value={draft.tags} onChange={e => setDraft({ ...draft, tags: e.target.value })} placeholder="用逗号分隔，最多8个" /></label><label>正文<textarea className="editor" value={draft.content} maxLength={50000} required onChange={e => setDraft({ ...draft, content: e.target.value })} /></label><div className="actions"><button className="primary-button" disabled={busy}>保存并发布</button><button type="button" disabled={busy} onClick={() => setDraft(null)}>取消</button></div></form>}
+    {draft && <form onSubmit={save} className="admin-editor"><h3>{draft.id ? '编辑文章' : '新建文章'}</h3><label>标题<input value={draft.title} maxLength={120} required onChange={e => setDraft({ ...draft, title: e.target.value })} /></label><label>标签<input value={draft.tags} onChange={e => setDraft({ ...draft, tags: e.target.value })} placeholder="用逗号分隔，最多8个" /></label><label>正文<textarea className="editor" value={draft.content} maxLength={50000} required onChange={e => setDraft({ ...draft, content: e.target.value })} /></label><ImagePicker label="添加正文图片" onSelect={addImage} disabled={busy||imageBusy} /><div className="actions"><button className="primary-button" disabled={busy||imageBusy}>保存并发布</button><button type="button" disabled={busy} onClick={() => setDraft(null)}>取消</button></div></form>}
     <div className="admin-table-wrap"><table><thead><tr><th>标题</th><th>作者</th><th>评论</th><th>操作</th></tr></thead><tbody>{articles.map(article => <tr key={article.id}><td>{article.title}</td><td>{article.author}</td><td>{article.comment_count}</td><td className="table-actions"><button disabled={busy} onClick={() => edit(article.id)}>编辑</button><button disabled={busy} className="danger" onClick={() => remove(article.id)}>删除</button></td></tr>)}</tbody></table>{!articles.length && <p className="empty">暂无文章，点击“发布文章”开始。</p>}</div>
   </>;
 }
@@ -72,16 +77,16 @@ export function AdminDashboard({ user, route, onLogin, wallpaper }) {
   const can = permission => user?.permissions?.includes(permission) && !user.needsContactVerification;
   const sections = [
     ['overview', '站点概览', true], ['articles', '文章管理', can('article.manage')], ['comments', '评论管理', can('comment.moderate')],
-    ['users', '账号与访客', owner || can('user.ban') || can('visitor.ban')], ['feedback', '问题反馈', can('feedback.manage')], ['quota', '额度与用量', owner], ['security', '登录报备', owner],
+    ['users', '账号与访客', owner || can('user.ban') || can('visitor.ban')], ['feedback', '问题反馈', can('feedback.manage')], ['permissions', '权限管理', owner], ['quota', '额度与用量', owner], ['security', '登录报备', owner],
     ['content', '板块内容', can('site.manage')], ['appearance', '全站背景', can('site.manage')], ['members', '成员列表', true],
   ];
   const allowed = user && !user.needsContactVerification && ['owner', 'admin'].includes(user.role);
   const active = route === '/management' ? 'users' : route.split('/')[2] || 'overview';
-  const icons = { overview: '◫', articles: '▤', comments: '☷', users: '♙', feedback: '✉', quota: '◴', security: '◇', content: '▦', appearance: '◈', members: '♧' };
+  const icons = { permissions: '⚿', overview: '◫', articles: '▤', comments: '☷', users: '♙', feedback: '✉', quota: '◴', security: '◇', content: '▦', appearance: '◈', members: '♧' };
   return <div className="admin-shell"><aside className="admin-sidebar"><a className="admin-logo" href="#/admin">✦ mowu<span>管理后台</span></a><nav aria-label="管理后台导航">{sections.filter(([, , enabled]) => enabled && allowed).map(([id, label]) => <a key={id} href={'#/admin/' + id} aria-current={active === id ? 'page' : undefined}><span className="admin-nav-label"><span className="admin-nav-icon" aria-hidden="true">{icons[id]}</span>{label}</span><span className="admin-nav-chevron" aria-hidden="true">›</span></a>)}</nav><a className="admin-return" href="#/">← 返回博客前台</a></aside><div className="admin-workspace"><header className="admin-header"><span>控制台 / {sections.find(([id]) => id === active)?.[1] || '页面不存在'}</span><span className="admin-header-user"><span className="admin-header-avatar">{user?.username?.slice(0, 1).toUpperCase() || 'M'}</span><span>{user?.username || '尚未登录'}<small>{allowed ? (owner ? '站主' : '管理员') : '管理工作台'}</small></span></span></header><main className="admin-content">
     {!allowed ? <><h1>管理后台</h1><p>{user ? '当前账号尚未验证，或没有后台管理权限。' : '请先登录站主或管理员账号。'}</p>{!user && <button className="primary-button" onClick={onLogin}>登录账号</button>}</> : !sections.some(([id, , enabled]) => id === active && enabled) ? <p>该页面不存在或当前账号没有权限。</p> : <>
       <OwnerReportNotice user={user} route={route} />
-      {active === 'members' && <AdminMembers />}{active === 'appearance' && <WallpaperSettings wallpaper={wallpaper} />}{active === 'overview' && <Overview />}{active === 'articles' && <AdminArticles />}{active === 'comments' && <AdminComments />}{active === 'users' && <ManagementPanel user={user} onClose={() => { window.location.hash = '/admin'; }} showBudget={false} />}{active === 'feedback' && <AdminFeedback />}{active === 'quota' && <><h2>额度与用量</h2><p className="muted">这里显示 EmailJS 邮件额度估算与防刷限制，并非现金余额。</p><EmailBudget /></>}{active === 'security' && <LoginReports />}{active === 'content' && <ContentManager />}
+      {active === 'permissions' && <RolePermissions />}{active === 'members' && <AdminMembers />}{active === 'appearance' && <WallpaperSettings wallpaper={wallpaper} />}{active === 'overview' && <Overview />}{active === 'articles' && <AdminArticles />}{active === 'comments' && <AdminComments />}{active === 'users' && <ManagementPanel user={user} onClose={() => { window.location.hash = '/admin'; }} showBudget={false} />}{active === 'feedback' && <AdminFeedback />}{active === 'quota' && <><h2>额度与用量</h2><p className="muted">这里显示 EmailJS 邮件额度估算与防刷限制，并非现金余额。</p><EmailBudget /></>}{active === 'security' && <LoginReports />}{active === 'content' && <ContentManager />}
     </>}
   </main></div></div>;
 }

@@ -18,6 +18,7 @@ function createApi(options) {
   if (process.env.TRUST_PROXY_HOPS === '1') app.set('trust proxy', 1);
   const origins = (options.origins || process.env.CORS_ORIGINS || 'http://localhost:5173,http://127.0.0.1:5173').split(',').map(s => s.trim());
   app.use(cors({ exposedHeaders: ['X-Visitor-Token'], origin(origin, done) { done(null, !origin || origins.includes(origin)); } }));
+  app.use('/api/content-media', express.json({ limit: '1mb' }));
   app.use('/api/management/appearance', express.json({ limit: '1mb' }));
   app.use(express.json({ limit: '256kb' }));
   let ownerMigration;
@@ -52,7 +53,7 @@ function createApi(options) {
     await db.prepare('DELETE FROM sessions WHERE expires_at<=?').run(Date.now());
     const token = randomBytes(32).toString('hex');
     await db.prepare('INSERT INTO sessions VALUES (?,?,?)').run(tokenHash(token), user.id, Date.now() + 7 * 86400_000);
-    return { token, user: publicUser(user) };
+    return { token, user: publicUser(await accounts.hydrateUser(user)) };
   }
   app.get('/api/health', async (req, res) => {
     await db.prepare('SELECT 1 AS n').get();
@@ -77,7 +78,9 @@ function createApi(options) {
   const support = require('./support').createSupport({ db, requireVerified: accounts.requireVerified, requirePermission: accounts.requirePermission, authLimit });
   app.use('/api/feedback', support.publicRouter);
   app.use('/api/management', support.managementRouter);
-  app.use('/api/content', require('./site-content').createSiteContent({ db, requireVerified: accounts.requireVerified, requirePermission: accounts.requirePermission, authLimit }));
+  const siteContent = require('./site-content').createSiteContent({ db, requireVerified: accounts.requireVerified, requirePermission: accounts.requirePermission, authLimit });
+  app.use('/api/content', siteContent);
+  app.use('/api/content-media', require('./content-media').createContentMedia({db,requireStaff:accounts.requireStaff,requirePermission:accounts.requirePermission,authLimit}));
   app.get('/api/stats', async (req, res) => res.json({ articles: (await db.prepare('SELECT COUNT(*) AS n FROM articles').get()).n, comments: (await db.prepare('SELECT COUNT(*) AS n FROM comments').get()).n, users: (await db.prepare('SELECT COUNT(*) AS n FROM users').get()).n }));
   const githubProjects = require('./github-projects').createGithubProjects();
   const githubBrowser = require('./github-browser').createGithubBrowser();
@@ -92,6 +95,11 @@ function createApi(options) {
     if (++bucket.count > 30) return fail(res, 429, '查询过于频繁，请10分钟后重试');
     next();
   }
+  const translateGithub = require('./github-translation').createGithubTranslation({db});
+  app.post('/api/github-translate', githubLimit, async (req,res) => {
+    try { res.json(await translateGithub(req.body?.text)); }
+    catch(error) { fail(res,[400,429].includes(error.status)?error.status:503,error.status?error.message:'中文翻译暂不可用，请查看原文或稍后重试'); }
+  });
   for (const [path, lookup] of [
     ['/api/github-search', req => githubBrowser.search(req.query.q, Number(req.query.page || 1))],
     ['/api/github-repo', req => githubBrowser.repo(req.query.name)],
@@ -118,6 +126,14 @@ function createApi(options) {
   const articleSelect = 'SELECT a.*,u.username AS author,(SELECT COUNT(*) FROM comments c WHERE c.article_id=a.id) AS comment_count FROM articles a JOIN users u ON u.id=a.author_id';
   const serialize = article => ({ ...article, tags: JSON.parse(article.tags) });
   const getArticle = id => db.prepare(articleSelect + ' WHERE a.id=?').get(id);
+  app.get('/api/search', accounts.requirePermission('article.read'), async (req, res) => {
+    const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    if (!q || q.length > 80) return fail(res, 400, '搜索词须为1—80字');
+    // Parameter binding and literal substring matching avoid wildcard expansion.
+    const pattern = '%' + q.replace(/[!%_]/g, value => '!' + value) + '%';
+    const rows = await db.prepare(articleSelect + " WHERE lower(a.title) LIKE lower(?) ESCAPE '!' OR lower(a.content) LIKE lower(?) ESCAPE '!' OR lower(a.tags) LIKE lower(?) ESCAPE '!' ORDER BY a.id DESC LIMIT 40").all(pattern,pattern,pattern);
+    res.json({content: await siteContent.search(pattern), articles: rows.map(article => ({ id: article.id, title: article.title, summary: article.content.slice(Math.max(0,article.content.toLowerCase().indexOf(q.toLowerCase())-40), Math.max(0,article.content.toLowerCase().indexOf(q.toLowerCase())-40)+180), tags: JSON.parse(article.tags) })) });
+  });
   app.get('/api/articles', accounts.requirePermission('article.read'), async (req, res) => {
     const articles = (await db.prepare(articleSelect + ' ORDER BY a.id DESC').all()).map(serialize).map(({ content, ...article }) => ({ ...article, summary: content.slice(0, 140) }));
     res.json(articles);

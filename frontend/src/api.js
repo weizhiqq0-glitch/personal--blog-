@@ -13,3 +13,6 @@ export async function api(path, { token = sessionStorage.getItem('blog-token'), 
   if (!response.ok) { const error = Error(data.error || '请求失败'); error.status = response.status; throw error; }
   return data;
 }
+
+export const apiMediaUrl = path => origin + '/api' + path;
+export const resolveMediaUrl = value => value?.startsWith('/api/content-media/') ? apiMediaUrl(value.slice(4)) : value;

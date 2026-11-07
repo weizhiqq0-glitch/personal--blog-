@@ -1,0 +1,6 @@
+import { useRef, useState } from 'react';
+export function ImagePicker({ onSelect, disabled, preview, label='选择图片' }) {
+  const [drag,setDrag]=useState(false),[error,setError]=useState(''),[busy,setBusy]=useState(false);const input=useRef(null),version=useRef(0);
+  async function select(file){if(!file||disabled||busy)return;const current=++version.current;setBusy(true);setError('');try{await onSelect(file);}catch(e){if(current===version.current)setError(e.name==='EncodingError'?'这张图片无法读取，可能已损坏或格式不受支持，请换一张 JPG、PNG 或 WebP 图片':e.message);}finally{if(current===version.current)setBusy(false);if(input.current)input.current.value='';}}
+  return <div className={'image-drop'+(drag?' drag-over':'')} onDragOver={e=>{e.preventDefault();if(!disabled)setDrag(true);}} onDragLeave={()=>setDrag(false)} onDrop={e=>{e.preventDefault();setDrag(false);select(e.dataTransfer.files?.[0]);}}><label>{label}<input ref={input} type="file" accept="image/jpeg,image/png,image/webp" disabled={disabled||busy} onChange={e=>select(e.target.files?.[0])}/></label><small>{busy?'正在处理图片…':'手机可选择相册；电脑可点击浏览或把图片拖到此处。JPG / PNG / WebP，最大10MB。'}</small>{preview&&<img src={preview} alt="所选图片预览"/>}{error&&<p role="alert">{error}</p>}</div>;
+}

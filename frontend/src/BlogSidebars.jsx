@@ -27,7 +27,7 @@ export function BlogSidebar({ articles, stats, user }) {
 }
 export function BlogRightbar({ articles, openArticle }) {
   return <aside className="blog-rightbar"><section className="paper-card postcard"><span className="paper-tape" aria-hidden="true" /><div className="postcard-landscape" aria-hidden="true"><span className="postcard-sun" /><span className="postcard-ridge" /></div><p className="eyebrow">DEAR VISITOR</p><h2>遇见，即是好天气。</h2><p className="muted">在文字与生活之间，<br />给自己留一点空白。</p></section>
-    <section className="paper-card feature-directory"><h3>✦ 小站漫游</h3><a href="#/daily"><span>每日60s</span><small>给世界留一分钟 ↗</small></a><a href="#/playground"><span>游乐场</span><small>去找一点新鲜感 ↗</small></a><a href="#/experience"><span>动效体验</span><small>和色彩一起游动 ↗</small></a></section>
+    <section className="paper-card feature-directory"><h3>✦ 小站漫游</h3><a href="#/search"><span>搜索小站</span><small>找文章和功能 ↗</small></a><a href="#/daily"><span>每日60s</span><small>给世界留一分钟 ↗</small></a><a href="#/playground"><span>游乐场</span><small>去找一点新鲜感 ↗</small></a><a href="#/experience"><span>动效体验</span><small>和色彩一起游动 ↗</small></a></section>
     <section className="paper-card module-links"><h3>⌘ 更多空间</h3><a href="#/github">GitHub 开源精选<span>↗</span></a><a href="#/tools">工具箱<span>↗</span></a><a href="#/members">站员<span>↗</span></a>{Object.entries(contentKinds).map(([key, config]) => <a key={key} href={'#/' + key}>{config.title}<span>↗</span></a>)}</section>
     {!!articles.length && <section className="paper-card"><h3>最近的故事</h3>{articles.slice(0, 4).map(article => <button className="sidebar-article" key={article.id} onClick={() => openArticle(article.id)}>{article.title}<span>↗</span></button>)}</section>}
   </aside>;

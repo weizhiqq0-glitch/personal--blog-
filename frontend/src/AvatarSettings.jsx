@@ -1,3 +1,5 @@
+import { ImagePicker } from './ImagePicker';
+import './SiteSearch.css';
 import { useRef, useState } from 'react';
 import { api } from './api';
 import { Avatar } from './Avatar';
@@ -24,8 +26,7 @@ export function AvatarSettings({ user, onUpdated }) {
   const [message, setMessage] = useState('');
   const input = useRef(null);
   const selection = useRef(0);
-  async function select(event) {
-    const file = event.target.files?.[0];
+  async function select(file) {
     const current = ++selection.current;
     setPreview(''); setMessage('');
     if (!file) return;
@@ -43,6 +44,6 @@ export function AvatarSettings({ user, onUpdated }) {
   }
   return <section className="avatar-settings"><h2>我的头像</h2><div className="avatar-preview-row">
     {preview ? <img className="avatar-preview" src={preview} alt="新头像预览" /> : <Avatar id={user.id} name={user.username} version={user.avatarVersion} size={80} />}
-    <div><label>选择头像<input ref={input} type="file" accept="image/jpeg,image/png,image/webp" onChange={select} disabled={busy} /></label><p className="muted">自动居中裁成正方形。头像会公开显示在账号和评论旁，并随账号同步。</p></div>
+    <div><ImagePicker label="选择头像" onSelect={select} disabled={busy} /><p className="muted">自动居中裁成正方形。头像会公开显示在账号和评论旁，并随账号同步。</p></div>
     </div><div className="actions"><button disabled={busy || !preview || user.needsContactVerification} onClick={() => save()} className="primary-button">保存头像</button><button disabled={busy || user.needsContactVerification} onClick={() => save(true)}>恢复默认头像</button></div>{message && <p role="status">{message}</p>}</section>;
 }

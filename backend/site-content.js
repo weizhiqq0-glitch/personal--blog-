@@ -8,7 +8,7 @@ function safeLink(value) {
 }
 function validateContent(body, kind) {
   if (!KINDS.includes(kind) || typeof body?.title !== 'string' || !body.title.trim() || body.title.length > 120 || typeof body.content !== 'string' || body.content.length > 20000) return null;
-  const url = safeLink(body.url), image = safeLink(body.image);
+  const url = safeLink(body.url), image = /^\/api\/content-media\/[a-f0-9]{32}$/.test(body.image || '') ? body.image : safeLink(body.image);
   if (url === null || image === null || (kind === 'music' && !url) || (kind === 'photos' && !image)) return null;
   return { title: body.title.trim(), content: body.content.trim(), url, image };
 }
@@ -19,6 +19,7 @@ function createSiteContent({ db, requireVerified, requirePermission, authLimit }
     return ready;
   }
   const router = express.Router();
+  router.search = async pattern => { await init(); return db.prepare("SELECT item_key,kind,title,content FROM site_content WHERE lower(title) LIKE lower(?) ESCAPE '!' OR lower(content) LIKE lower(?) ESCAPE '!' ORDER BY created_at DESC LIMIT 40").all(pattern,pattern); };
   router.param('kind', (req, res, next, kind) => KINDS.includes(kind) ? next() : res.status(404).json({ error: '板块不存在' }));
   router.get('/:kind', async (req, res) => {
     await init();

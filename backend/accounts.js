@@ -8,6 +8,15 @@ const { createMailBudget } = require('./mail-budget');
 function createAccounts({ db, passwords, emailSender, mailPolicy, ownerEntryHash, ownerDeviceSetupHash, localDeviceEnrollment = false }) {
   const budget = createMailBudget(db, mailPolicy);
   const verification = createVerification(db, emailSender, budget);
+  const userRights = ['article.read', 'comment.read', 'comment.create'];
+  let policyReady;
+  async function rolePolicy() {
+    if (!policyReady) policyReady = Promise.resolve(db.ready).then(() => db.prepare('CREATE TABLE IF NOT EXISTS role_policy(role TEXT PRIMARY KEY,permissions TEXT NOT NULL)').run()).catch(error => { policyReady = undefined; throw error; });
+    await policyReady;
+    const row = await db.prepare("SELECT permissions FROM role_policy WHERE role='user'").get();
+    return row ? JSON.parse(row.permissions) : Object.fromEntries(userRights.map(key => [key, true]));
+  }
+  async function hydrateUser(user) { if (user?.role === 'user') user.rolePolicy = await rolePolicy(); return user; }
   let loginReady;
   function loginTable() {
     if (!loginReady) loginReady = Promise.resolve(db.ready).then(() => db.prepare('CREATE TABLE IF NOT EXISTS account_last_login(user_id INTEGER PRIMARY KEY,logged_at BIGINT NOT NULL,device TEXT NOT NULL)').run()).catch(error => { loginReady = undefined; throw error; });
@@ -68,6 +77,7 @@ function createAccounts({ db, passwords, emailSender, mailPolicy, ownerEntryHash
   }
   async function checkRequest(req, res, next) {
     if (req.path === '/api/health') return next();
+    await hydrateUser(req.user);
     if (req.user?.banned) return fail(res, 403, '此账号已被封禁，请联系站主');
     let visitor = req.get('x-visitor-token');
     if (!/^[a-f0-9]{64}$/.test(visitor || '')) visitor = randomBytes(32).toString('hex');
@@ -180,7 +190,7 @@ function createAccounts({ db, passwords, emailSender, mailPolicy, ownerEntryHash
         if (error.code === '23505' || error.message.includes('UNIQUE')) return fail(res, 409, '此邮箱已被其他账号绑定');
         throw error;
       }
-      res.json(publicUser(await db.prepare('SELECT * FROM users WHERE id=?').get(req.user.id)));
+      res.json(publicUser(await hydrateUser(await db.prepare('SELECT * FROM users WHERE id=?').get(req.user.id))));
     });
     router.post('/password/reset', authLimit, async (req, res) => {
       const contact = normalizeContact('email', req.body?.contact);
@@ -200,6 +210,15 @@ function createAccounts({ db, passwords, emailSender, mailPolicy, ownerEntryHash
     router.param('id', (req, res, next, id) => /^[1-9]\d*$/.test(id) && Number(id) <= 2147483647 ? next() : fail(res, 404, '账号不存在'));
     router.use(requireVerified);
     const canList = (req, res, next) => req.user.role === 'owner' || effectivePermissions(req.user).includes('user.ban') ? next() : fail(res, 403, '没有账号管理权限');
+    router.get('/role-policy', ownerOnly, async (req, res) => res.json({ permissions: Object.fromEntries(userRights.map(key => [key, PERMISSIONS[key]])), enabled: await rolePolicy() }));
+    router.put('/role-policy', ownerOnly, async (req, res) => {
+      const value = req.body?.enabled;
+      if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length !== userRights.length || userRights.some(key => typeof value[key] !== 'boolean') || Object.keys(value).some(key => !userRights.includes(key))) return fail(res, 400, '请提交完整的普通用户权限开关');
+      await rolePolicy();
+      await db.prepare("INSERT INTO role_policy(role,permissions) VALUES ('user',?) ON CONFLICT(role) DO UPDATE SET permissions=excluded.permissions").run(JSON.stringify(value));
+      await audit(req, 'role.permissions', 'user', value);
+      res.json({ message: '普通用户权限已更新，下一次请求立即生效', enabled: value });
+    });
     router.get('/device-status', ownerOnly, async (req, res) => {
       await securityTables();
       const bound = !!await db.prepare('SELECT user_id FROM owner_trusted_device WHERE user_id=?').get(req.user.id);
@@ -234,6 +253,8 @@ function createAccounts({ db, passwords, emailSender, mailPolicy, ownerEntryHash
     router.get('/users', canList, async (req, res) => {
       await loginTable();
       const users = await db.prepare('SELECT id,username,role,contact_type,contact_value,verified_at,banned,ban_reason,permissions,created_at FROM users ORDER BY id DESC LIMIT 200').all();
+      const policy = await rolePolicy();
+      users.forEach(user => { user.rolePolicy = policy; });
       const logins = req.user.role === 'owner' ? await db.prepare('SELECT * FROM account_last_login').all() : [];
       res.json({ permissions: PERMISSIONS, users: users.map(user => ({ id: user.id, username: user.username, role: user.role, verified: !!user.verified_at, banned: !!user.banned, banReason: user.ban_reason,
         contact: user.contact_value ? (req.user.role === 'owner' ? user.contact_value : user.contact_value[0] + '***@' + user.contact_value.split('@')[1]) : '',
@@ -283,6 +304,6 @@ function createAccounts({ db, passwords, emailSender, mailPolicy, ownerEntryHash
     await db.prepare('INSERT INTO visitors(key,first_seen,last_seen) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET last_seen=excluded.last_seen').run(req.visitorKey, now, now);
     await db.prepare('INSERT INTO page_visitors(key,first_seen,last_seen) VALUES (?,?,?) ON CONFLICT(key) DO UPDATE SET last_seen=excluded.last_seen').run(req.visitorKey, now, now);
   }
-  return { recordVisit, checkRequest, requireVerified, requireStaff, requirePermission, authRouter, managementRouter };
+  return { hydrateUser, recordVisit, checkRequest, requireVerified, requireStaff, requirePermission, authRouter, managementRouter };
 }
 module.exports = { createAccounts };

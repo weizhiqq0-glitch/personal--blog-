@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-const destinations = [['/', '首页'], ['/github', 'GitHub'], ['/tools', '工具箱'], ['/projects', '项目'], ['/archive', '归档'], ['/photos', '照片墙'], ['/music', '音乐'], ['/moments', '说说'], ['/chatter', '碎碎念'], ['/friends', '友链'], ['/about', '关于'], ['/members', '站员']];
+const destinations = [['/', '首页'], ['/search', '搜索'], ['/github', 'GitHub'], ['/tools', '工具箱'], ['/projects', '项目'], ['/archive', '归档'], ['/photos', '照片墙'], ['/music', '音乐'], ['/moments', '说说'], ['/chatter', '碎碎念'], ['/friends', '友链'], ['/about', '关于'], ['/members', '站员']];
 function NavigationWheel({ route, onClose }) {
   const dialog = useRef(null);
   useEffect(() => { const element = dialog.current; element.showModal(); return () => element.close(); }, []);

@@ -1,3 +1,5 @@
+import { ArticleBody } from './ArticleBody';
+import { SiteSearch } from './SiteSearch';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from './api';
 import { AuthDialog } from './AuthDialog';
@@ -76,10 +78,10 @@ export default function App() {
     let active = true;
     Promise.all([api('/articles'), api('/stats')])
       .then(([list, totals]) => { if (active) { setArticles(list); setStats(totals); } })
-      .catch(e => { if (active) setError(e.message); })
+      .catch(e => { if (active) { setArticles([]); setError(e.message); } })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [route]);
+  }, [route, token]);
   useEffect(() => {
     let active = true;
     if (token) api('/auth/me', { token }).then(value => { if (active) setUser(value); }).catch(e => {
@@ -89,7 +91,7 @@ export default function App() {
       }
     });
     return () => { active = false; };
-  }, [token]);
+  }, [token, route]);
   useEffect(() => { if (detailId) panel.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, [detailId]);
 
   async function refresh() {
@@ -153,7 +155,7 @@ export default function App() {
         <header className="topbar">
           <a className="brand" href="#/" onClick={closePanels}><span className="brand-mark"><BlinkStar /></span><span>mowu的小站</span></a>
           <nav>
-            <a href="#/" onClick={closePanels}>首页</a><a href="#/archive" onClick={closePanels}>文章归档</a>
+            <a href="#/" onClick={closePanels}>首页</a><a href="#/archive" onClick={closePanels}>文章归档</a><a href="#/search" onClick={closePanels}>搜索</a>
             <a className="feature-nav" href="#/daily" onClick={closePanels}>每日60s</a>
             <a className="feature-nav" href="#/playground" onClick={closePanels}>游乐场</a>
             <a className="feature-nav" href="#/experience" onClick={closePanels}>动效体验</a>
@@ -177,7 +179,7 @@ export default function App() {
         </>}
         <div ref={panel} className="panel-anchor" />
         {authMode && <AuthDialog key={authMode} mode={authMode} busy={busy} error={error} onClose={() => { setAuthMode(null); setError(''); }} onModeChange={showAuth} onSubmit={authenticate} initialEmail={authMode === 'bind' ? user?.contact?.value || '' : ''} />}
-        {route === '/settings' && <UserSettings user={user} onAvatarUpdated={version => setUser(current => ({ ...current, avatarVersion: version }))} theme={theme} choose={choose} onSaved={text => { sessionStorage.removeItem('blog-token'); setToken(''); setUser(null); setMessage(text); showAuth('login'); }} />}
+        {route === '/search' && <SiteSearch openArticle={openArticle} />}{route === '/settings' && <UserSettings user={user} onAvatarUpdated={version => setUser(current => ({ ...current, avatarVersion: version }))} theme={theme} choose={choose} onSaved={text => { sessionStorage.removeItem('blog-token'); setToken(''); setUser(null); setMessage(text); showAuth('login'); }} />}
         {route === '/github' && <GithubProjects />}
         {route === '/github-search' && <GithubSearch />}
         {route.startsWith('/github-repo/') && <GithubRepo key={route} name={route.slice('/github-repo/'.length)} />}
@@ -192,7 +194,7 @@ export default function App() {
         {detail && <section className="article-card panel">
           <button className="read-button" onClick={() => setDetail(null)}>← 返回文章列表</button>
           <p className="article-date">{detail.author} · {date(detail.created_at)}</p><h2>{detail.title}</h2><div className="tags">{detail.tags.map(t => <span key={t}>#{t}</span>)}</div>
-          <div className="article-body">{detail.content}</div>
+          <ArticleBody content={detail.content} />
           <section className="comment-section"><h3>评论 · {comments.length}</h3>
             {can('comment.create') ? <form onSubmit={postComment}><label>发表你的评论<textarea value={comment} onChange={e => setComment(e.target.value)} maxLength={2000} required placeholder="友善交流，分享你的想法" /></label><button className="primary-button" disabled={busy}>发表评论</button></form> : <p className="muted">{user ? '请完成邮箱绑定；若已绑定，则当前账号暂未开放评论权限。' : '登录后即可参与讨论。'}{!user && <button onClick={() => showAuth('login')}>去登录</button>}</p>}
             {!comments.length && <p className="muted">还没有评论，来分享第一个想法吧。</p>}

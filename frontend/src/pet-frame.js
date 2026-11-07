@@ -1,3 +1,4 @@
+import { nightPeriod } from './pet-clock';
 import { createWidget } from 'l2d-widget';
 import './pet-interactions.css';
 const tell = petStatus => parent.postMessage({ petStatus }, location.origin);
@@ -23,12 +24,13 @@ function interact(action) {
   if (!ready) { say('我还在赶来，等我一下喵～'); return; }
   if (Date.now()-lastAction<800) return; lastAction=Date.now();
   if (action==='sleep') {
-    sleeping=!sleeping; const canvas=widget.l2d.getCanvas(); canvas.style.opacity=sleeping?'.45':'1';
-    sleepButton.textContent=sleeping?'☀ 叫醒小猫':'☾ 休息一下';
+    setSleep(!sleeping);
+    if(currentNight){if(!sleeping)sessionStorage.setItem('mowu-cat-awake',currentNight);else sessionStorage.removeItem('mowu-cat-awake');}
     say(sleeping?'呼噜…我在这里陪你安静一会儿。':'睡醒啦！又是元气满满的小猫。');
     if(!sleeping)motion(0); return;
   }
   if(sleeping){say('呼噜…点「叫醒小猫」，再一起玩吧。');return;}
+  if(action==='search'){parent.postMessage({petAction:'search'},location.origin);say('想找什么？我带你去搜索小站！');menu.hidden=true;toggle.setAttribute('aria-expanded','false');return;}
   const replies={
     pet:['呼噜呼噜…这个力度刚刚好。','耳朵也想被摸摸，喵～','摸摸头，烦恼都跑掉。'],
     feed:['小鱼干收到！今天你就是我最喜欢的人。','啊呜…吃完这条，就陪你认真看文章。','谢谢投喂！也记得好好吃饭哦。'],
@@ -38,8 +40,22 @@ function interact(action) {
   };
   say(pick(replies[action]||replies.pet)); motion(action==='feed'?2:action==='play'?5:undefined);
 }
-let sleepButton;
-for (const [action,label] of [['pet','♡ 摸摸头'],['feed','魚 喂小鱼'],['play','✧ 逗猫玩'],['mood','☁ 今日心情'],['sleep','☾ 休息一下']]) {
+let sleepButton, clockTimer, currentNight;
+function setSleep(value) {
+  sleeping=value;
+  if(ready)widget.l2d.getCanvas().style.opacity=sleeping?'.45':'1';
+  sleepButton.textContent=sleeping?'☀ 叫醒小猫':'☾ 休息一下';
+}
+function syncClock() {
+  const period=nightPeriod();
+  if(currentNight===period)return;
+  currentNight=period;
+  const awake=period && sessionStorage.getItem('mowu-cat-awake')===period;
+  setSleep(!!period&&!awake);
+  if(ready)say(sleeping?'晚上啦，猫猫先睡了。点我就能叫醒喵～':'喵，我来陪你啦！');
+}
+
+for (const [action,label] of [['pet','♡ 摸摸头'],['feed','魚 喂小鱼'],['play','✧ 逗猫玩'],['mood','☁ 今日心情'],['search','⌕ 帮我搜索'],['sleep','☾ 休息一下']]) {
   const button=document.createElement('button');button.type='button';button.textContent=label;button.addEventListener('click',()=>interact(action));menu.append(button);if(action==='sleep')sleepButton=button;
 }
 toggle.addEventListener('click',()=>{menu.hidden=!menu.hidden;toggle.setAttribute('aria-expanded',String(!menu.hidden));});
@@ -59,11 +75,11 @@ try {
       if(event.button!==0)return; const box=canvas.getBoundingClientRect();const x=(event.clientX-box.left)/box.width,y=(event.clientY-box.top)/box.height;
       // This model has no named hit areas: use the visible central silhouette.
       if(x<.17||x>.83||y<.18||y>.94)return;
-      interact(y<.52?'pet':'body');
+      interact(sleeping?'sleep':y<.52?'pet':'body');
     });
-    say(new Date().getHours()<6?'夜深啦，我陪你安静看一会儿。':'喵，欢迎回来！点我或「互动」一起玩。');
+    syncClock(); clockTimer=setInterval(syncClock,15000); document.addEventListener('visibilitychange',syncClock);
     idle=setInterval(()=>{if(document.hidden||sleeping||!menu.hidden||Date.now()-lastAction<20000)return;motion();say(pick(['伸个懒腰～你也活动一下肩膀吧。','我在呢，慢慢看，不着急。','记得喝口水，猫猫提醒！']));},45000);
   });
   widget.l2d.on('error',fail);
 } catch {fail();}
-window.addEventListener('pagehide',()=>{disposed=true;clearTimeout(timeout);clearTimeout(hideBubble);clearInterval(idle);widget?.destroy().catch(()=>{});},{once:true});
+window.addEventListener('pagehide',()=>{disposed=true;clearTimeout(timeout);clearTimeout(hideBubble);clearInterval(idle);clearInterval(clockTimer);document.removeEventListener('visibilitychange',syncClock);widget?.destroy().catch(()=>{});},{once:true});

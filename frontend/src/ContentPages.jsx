@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { api } from './api';
+import { api, resolveMediaUrl } from './api';
 import { contentKinds } from './contentKinds';
 import './ContentPages.css';
 
 function MediaImage({ src, title }) {
   const [failed, setFailed] = useState(false);
-  return src && !failed ? <img src={src} alt={title} loading="lazy" referrerPolicy="no-referrer" onError={() => setFailed(true)} /> : <div className="media-placeholder">✦<span>{title}</span></div>;
+  return src && !failed ? <img src={resolveMediaUrl(src)} alt={title} loading="lazy" referrerPolicy="no-referrer" onError={() => setFailed(true)} /> : <div className="media-placeholder">✦<span>{title}</span></div>;
 }
 function PhotoViewer({ item, onClose }) {
   const dialog = useRef(null);

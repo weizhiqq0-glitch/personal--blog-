@@ -22,7 +22,7 @@ function effectivePermissions(user) {
     if (overrides[key] === true) result.add(key);
     if (overrides[key] === false) result.delete(key);
   }
-  return [...result];
+  return [...result].filter(key => user.role !== 'user' || user.rolePolicy?.[key] !== false);
 }
 function publicUser(user) {
   return { id: user.id, username: user.username, role: user.role,
