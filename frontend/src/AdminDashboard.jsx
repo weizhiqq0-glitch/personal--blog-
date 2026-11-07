@@ -9,6 +9,7 @@ import { OwnerReportNotice } from './OwnerReportNotice';
 import { AdminMembers } from './AdminMembers';
 import { WallpaperSettings } from './Wallpaper';
 import { ContentManager } from './ContentManager';
+import { Avatar } from './Avatar';
 
 function AdminArticles() {
   const [articles, setArticles] = useState([]);
@@ -40,15 +41,26 @@ function AdminComments() {
   return <><h2>评论管理</h2><p className="muted">显示最近200条评论。</p>{error && <p className="notice error">{error}</p>}{items.map(item => <article className="feedback-item" key={item.id}><strong>{item.username}</strong><small> · {item.article_title}</small><p>{item.content}</p><button disabled={busy} className="danger" onClick={() => remove(item.id)}>删除评论</button></article>)}{!items.length && <p className="empty">暂无评论。</p>}</>;
 }
 function FeedbackEditor({ item, onSave, busy }) {
-  const [status, setStatus] = useState(item.status); const [reply, setReply] = useState(item.reply);
-  return <article className="feedback-item"><h3>{item.subject}</h3><small>{item.username} · {new Date(Number(item.created_at)).toLocaleString('zh-CN')}</small><p>{item.content}</p><form onSubmit={event => { event.preventDefault(); onSave(item.report_key, { status, reply }); }}><label>处理状态<select value={status} onChange={e => setStatus(e.target.value)}>{Object.entries(feedbackStatuses).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><label>回复用户<textarea value={reply} onChange={e => setReply(e.target.value)} maxLength={2000} /></label><button disabled={busy} className="primary-button">保存处理结果</button></form></article>;
+  const [status, setStatus] = useState(item.status);
+  const [reply, setReply] = useState(item.reply || '');
+  return <article className="admin-feedback-card">
+    <div className="feedback-detail"><div className="feedback-card-top"><span className={'feedback-status status-' + item.status}>{feedbackStatuses[item.status]}</span><time dateTime={new Date(Number(item.created_at)).toISOString()}>{new Date(Number(item.created_at)).toLocaleString('zh-CN')}</time></div><h3>{item.subject}</h3><div className="feedback-author"><Avatar name={item.username} size={28} /><span>{item.username}</span><span className="muted">提交了反馈</span></div><p className="feedback-body">{item.content}</p></div>
+    <form className="feedback-reply-form" onSubmit={event => { event.preventDefault(); onSave(item.report_key, { status, reply }); }}><div className="feedback-reply-heading"><h4>处理与回复</h4><span>仅提交者与管理人员可见</span></div><label>处理状态<select value={status} onChange={e => setStatus(e.target.value)}>{Object.entries(feedbackStatuses).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select></label><label>回复内容<textarea value={reply} onChange={e => setReply(e.target.value)} maxLength={2000} rows={4} placeholder="写下处理进展，或告诉用户解决方法…" /></label><div className="feedback-reply-footer"><small>{reply.length} / 2000</small><button disabled={busy} className="primary-button">{busy ? '正在保存…' : '保存处理结果'}<span aria-hidden="true">↗</span></button></div></form>
+  </article>;
 }
 function AdminFeedback() {
   const [items, setItems] = useState([]); const [message, setMessage] = useState(''); const [busy, setBusy] = useState(false);
+  const [filter, setFilter] = useState('all'); const [loading, setLoading] = useState(true);
   const load = useCallback(async () => setItems(await api('/management/feedback')), []);
-  useEffect(() => { let active = true; api('/management/feedback').then(value => { if (active) setItems(value); }).catch(e => { if (active) setMessage(e.message); }); return () => { active = false; }; }, []);
+  useEffect(() => { let active = true; api('/management/feedback').then(value => { if (active) setItems(value); }).catch(e => { if (active) setMessage(e.message); }).finally(() => { if (active) setLoading(false); }); return () => { active = false; }; }, []);
+  async function refresh() { setLoading(true); try { await load(); } catch (e) { setMessage(e.message); } finally { setLoading(false); } }
   async function save(key, body) { if (busy) return; setBusy(true); try { const result = await api('/management/feedback/' + key, { method: 'PATCH', body: JSON.stringify(body) }); setMessage(result.message); await load(); } catch (e) { setMessage(e.message); } finally { setBusy(false); } }
-  return <><h2>问题反馈</h2><button onClick={() => load().catch(e => setMessage(e.message))}>刷新列表</button>{message && <p className="notice" role="status">{message}</p>}{items.map(item => <FeedbackEditor key={item.report_key + item.updated_at} item={item} onSave={save} busy={busy} />)}{!items.length && <p className="empty">暂无反馈，用户提交的问题会出现在这里。</p>}</>;
+  const visible = items.filter(item => filter === 'all' || item.status === filter);
+  return <><div className="admin-section-heading"><div><p className="admin-eyebrow">FEEDBACK INBOX</p><h2>问题反馈</h2><p className="muted">认真听见每一个声音，让小站变得更好。</p></div><button className="admin-refresh" disabled={loading || busy} onClick={refresh}><span aria-hidden="true">↻</span> {loading ? '加载中…' : '刷新列表'}</button></div>
+    <div className="feedback-summary">{Object.entries(feedbackStatuses).map(([key,label]) => <div key={key} className={'summary-' + key}><span><i />{label}</span><strong>{items.filter(item => item.status === key).length}<small>条反馈</small></strong></div>)}</div>
+    <div className="feedback-list-toolbar"><div className="feedback-filters" role="group" aria-label="筛选反馈">{[['all','全部反馈'],...Object.entries(feedbackStatuses)].map(([key,label]) => <button key={key} aria-pressed={filter === key} onClick={() => setFilter(key)}>{label}<span>{key === 'all' ? items.length : items.filter(item => item.status === key).length}</span></button>)}</div><span className="muted">共 {visible.length} 条</span></div>
+    {message && <p className="notice" role="status">{message}</p>}{visible.map(item => <FeedbackEditor key={item.report_key + item.updated_at} item={item} onSave={save} busy={busy} />)}{!visible.length && <div className="admin-feedback-empty"><span aria-hidden="true">✉</span><h3>{loading ? '正在整理收件箱…' : '收件箱很清净'}</h3><p>{filter === 'all' ? '用户提交的问题与建议，会出现在这里。' : '当前分类暂无反馈。'}</p></div>}
+  </>;
 }
 function Overview() {
   const [stats, setStats] = useState(null); const [error, setError] = useState('');
@@ -65,7 +77,8 @@ export function AdminDashboard({ user, route, onLogin, wallpaper }) {
   ];
   const allowed = user && !user.needsContactVerification && ['owner', 'admin'].includes(user.role);
   const active = route === '/management' ? 'users' : route.split('/')[2] || 'overview';
-  return <div className="admin-shell"><aside className="admin-sidebar"><a className="admin-logo" href="#/admin">✦ mowu<span>管理后台</span></a><nav aria-label="管理后台导航">{sections.filter(([, , enabled]) => enabled && allowed).map(([id, label]) => <a key={id} href={'#/admin/' + id} aria-current={active === id ? 'page' : undefined}>{label}<span>›</span></a>)}</nav><a className="admin-return" href="#/">← 返回博客前台</a></aside><div className="admin-workspace"><header className="admin-header"><span>控制台 / {sections.find(([id]) => id === active)?.[1] || '页面不存在'}</span><span>{user?.username || '尚未登录'}</span></header><main className="admin-content">
+  const icons = { overview: '◫', articles: '▤', comments: '☷', users: '♙', feedback: '✉', quota: '◴', security: '◇', content: '▦', appearance: '◈', members: '♧' };
+  return <div className="admin-shell"><aside className="admin-sidebar"><a className="admin-logo" href="#/admin">✦ mowu<span>管理后台</span></a><nav aria-label="管理后台导航">{sections.filter(([, , enabled]) => enabled && allowed).map(([id, label]) => <a key={id} href={'#/admin/' + id} aria-current={active === id ? 'page' : undefined}><span className="admin-nav-label"><span className="admin-nav-icon" aria-hidden="true">{icons[id]}</span>{label}</span><span className="admin-nav-chevron" aria-hidden="true">›</span></a>)}</nav><a className="admin-return" href="#/">← 返回博客前台</a></aside><div className="admin-workspace"><header className="admin-header"><span>控制台 / {sections.find(([id]) => id === active)?.[1] || '页面不存在'}</span><span className="admin-header-user"><span className="admin-header-avatar">{user?.username?.slice(0, 1).toUpperCase() || 'M'}</span><span>{user?.username || '尚未登录'}<small>{allowed ? (owner ? '站主' : '管理员') : '管理工作台'}</small></span></span></header><main className="admin-content">
     {!allowed ? <><h1>管理后台</h1><p>{user ? '当前账号尚未验证，或没有后台管理权限。' : '请先登录站主或管理员账号。'}</p>{!user && <button className="primary-button" onClick={onLogin}>登录账号</button>}</> : !sections.some(([id, , enabled]) => id === active && enabled) ? <p>该页面不存在或当前账号没有权限。</p> : <>
       <OwnerReportNotice user={user} route={route} />
       {active === 'members' && <AdminMembers />}{active === 'appearance' && <WallpaperSettings wallpaper={wallpaper} />}{active === 'overview' && <Overview />}{active === 'articles' && <AdminArticles />}{active === 'comments' && <AdminComments />}{active === 'users' && <ManagementPanel user={user} onClose={() => { window.location.hash = '/admin'; }} showBudget={false} />}{active === 'feedback' && <AdminFeedback />}{active === 'quota' && <><h2>额度与用量</h2><p className="muted">这里显示 EmailJS 邮件额度估算与防刷限制，并非现金余额。</p><EmailBudget /></>}{active === 'security' && <LoginReports />}{active === 'content' && <ContentManager />}
