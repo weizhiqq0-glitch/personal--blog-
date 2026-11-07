@@ -40,8 +40,19 @@ test('upstream rate limits cause cooldown; missing or large README degrades safe
   let calls=0; const limited=createGithubBrowser({fetcher:async()=>{calls++;return new Response('',{status:403});}});
   await assert.rejects(limited.search('tool'),{status:503});
   await assert.rejects(limited.search('another'),{status:429});assert.equal(calls,1);
-  const browser=createGithubBrowser({fetcher:async url=>new Response(JSON.stringify(url.endsWith('/readme')?{encoding:'base64',size:200001,content:'YQ=='}:{full_name:'owner/tool'}))});
+  const browser=createGithubBrowser({fetcher:async url=>url.startsWith('https://raw.githubusercontent.com/') ? new Response('',{status:404}) : new Response(JSON.stringify(url.endsWith('/readme')?{encoding:'base64',size:200001,content:'YQ=='}:{full_name:'owner/tool'}))});
   assert.equal((await browser.repo('owner/tool')).readmeUnavailable,true);
+});
+test('core quota fallback uses precise public search and official raw README',async()=>{
+  const urls=[];
+  const browser=createGithubBrowser({fetcher:async(url,options)=>{
+    urls.push(url); assert.equal(options.redirect,'manual');
+    if(url.includes('/search/'))return new Response(JSON.stringify({items:[{full_name:'owner/tool',private:false}]}));
+    if(url.startsWith('https://raw.githubusercontent.com/'))return new Response('# Tool');
+    return new Response('',{status:403});
+  }});
+  const repo=await browser.repo('owner/tool');assert.equal(repo.readme,'# Tool');assert.equal(repo.readmeUnavailable,false);
+  assert.equal(urls.length,3);assert.equal(urls[2],'https://raw.githubusercontent.com/owner/tool/HEAD/README.md');
 });
 test('uses Worker-compatible manual mode and rejects upstream redirects',async()=>{
   const browser=createGithubBrowser({fetcher:async(url,options)=>{

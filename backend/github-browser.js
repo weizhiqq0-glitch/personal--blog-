@@ -1,13 +1,14 @@
 const { sanitize } = require('./github-projects');
 function createGithubBrowser({ fetcher = fetch, now = Date.now } = {}) {
   const cache = new Map(), pending = new Map();
-  let blockedUntil = 0;
+  const blockedUntil = { search:0, core:0 };
   let running = 0;
   async function get(path) {
+    const budget = path.startsWith('search/') ? 'search' : 'core';
     const old = cache.get(path);
     if (old && now() - old.time < 30 * 60000) return old;
     if (pending.has(path)) return pending.get(path);
-    if (now() < blockedUntil || running >= 3) throw Object.assign(Error('GitHub 查询繁忙或额度暂不可用，请稍后再试。'), { status: 429 });
+    if (now() < blockedUntil[budget] || running >= 3) throw Object.assign(Error('GitHub 查询繁忙或额度暂不可用，请稍后再试。'), { status: 429 });
     const request = (async () => {
       running++;
       try {
@@ -15,7 +16,7 @@ function createGithubBrowser({ fetcher = fetch, now = Date.now } = {}) {
         // of using Node's error mode, which fails before sending in Workers.
         const response = await fetcher('https://api.github.com/' + path, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'mowu-blog-search' }, signal: AbortSignal.timeout(10000), redirect: 'manual' });
         if (!response.ok) {
-          if ([403,429].includes(response.status)) blockedUntil = now() + 60000;
+          if ([403,429].includes(response.status)) blockedUntil[budget] = now() + 60000;
           throw Object.assign(Error(response.status === 404 ? '没有找到这个公开仓库或 README。' : 'GitHub 暂时无法查询，请稍后再试。'), { status: response.status === 404 ? 404 : 503 });
         }
         const text = await response.text();
@@ -39,7 +40,19 @@ function createGithubBrowser({ fetcher = fetch, now = Date.now } = {}) {
     },
     async repo(name) {
       if (typeof name !== 'string' || !/^[A-Za-z0-9][\w.-]{0,99}\/[A-Za-z0-9][\w.-]{0,99}$/.test(name) || name.split('/').some(x => x === '.' || x === '..')) throw Object.assign(Error('仓库名称无效。'), { status: 400 });
-      const { data, time } = await get('repos/' + name);
+      let entry;
+      try { entry = await get('repos/' + name); }
+      catch (error) {
+        if (error.status !== 503 && error.status !== 429) throw error;
+        // Search has a separate GitHub rate budget from the repository API.
+        // A precise public search can still return metadata when the shared
+        // Workers egress IP has exhausted its anonymous core API allowance.
+        const search = await get('search/repositories?q=' + encodeURIComponent('repo:' + name + ' is:public') + '&per_page=1');
+        const match = search.data.items?.find(item => item.full_name?.toLowerCase() === name.toLowerCase());
+        if (!match) throw Object.assign(Error('没有找到这个公开仓库。'), {status:404});
+        entry = { data: match, time: search.time };
+      }
+      const { data, time } = entry;
       const repo = sanitize(data);
       if (!repo || data.private) throw Object.assign(Error('仅支持公开仓库。'), { status: 404 });
       let readme = '', readmeUnavailable = false;
@@ -47,7 +60,16 @@ function createGithubBrowser({ fetcher = fetch, now = Date.now } = {}) {
         const { data: body } = await get('repos/' + name + '/readme');
         if (body.encoding !== 'base64' || body.size > 200000 || typeof body.content !== 'string') throw Error('README too large');
         readme = Buffer.from(body.content, 'base64').toString('utf8');
-      } catch { readmeUnavailable = true; }
+      } catch {
+        // Fixed official raw host; never proxy a caller-provided URL.
+        try {
+          const response = await fetcher('https://raw.githubusercontent.com/' + name + '/HEAD/README.md', { redirect:'manual', signal:AbortSignal.timeout(10000) });
+          if (!response.ok) throw Error('README unavailable');
+          const value = await response.text();
+          if (value.length > 200000) throw Error('README too large');
+          readme = value;
+        } catch { readmeUnavailable = true; }
+      }
       return { ...repo, readme, readmeUnavailable, fetchedAt: new Date(time).toISOString() };
     },
   };
