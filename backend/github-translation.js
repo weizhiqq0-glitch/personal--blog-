@@ -9,11 +9,21 @@ function createGithubTranslation({db,fetcher=fetch,now=Date.now}) {
     if(pending.has(key))return pending.get(key);
     if(pending.size>=3)throw Object.assign(Error('翻译繁忙，请稍后点击重试'),{status:429});
     const job=(async()=>{const day=new Date(now()).toISOString().slice(0,10);
-      const reserved=await db.prepare('INSERT INTO github_translation_budget(day,used) VALUES (?,?) ON CONFLICT(day) DO UPDATE SET used=github_translation_budget.used+excluded.used WHERE github_translation_budget.used+excluded.used<=6000').run(day,text.length);
+      const reserved=await db.prepare('INSERT INTO github_translation_budget(day,used) VALUES (?,?) ON CONFLICT(day) DO UPDATE SET used=github_translation_budget.used+excluded.used WHERE github_translation_budget.used+excluded.used<=4500').run(day,text.length);
       if(!reserved.changes)throw Object.assign(Error('今日免费翻译次数已达本站上限，请查看原文'),{status:429});
-      const url='https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=zh-CN&dt=t&q='+encodeURIComponent(text);
-      const response=await fetcher(url,{redirect:'manual',signal:AbortSignal.timeout(7000)});if(!response.ok)throw Error('翻译服务暂不可用');
-      const body=await response.text();if(body.length>20000)throw Error('翻译返回异常');const data=JSON.parse(body);const translated=Array.isArray(data?.[0])?data[0].map(item=>typeof item?.[0]==='string'?item[0]:'').join(''):'';
+      let translated='';
+      try {
+        const response=await fetcher('https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=zh-CN&dt=t&q='+encodeURIComponent(text),{redirect:'manual',signal:AbortSignal.timeout(3500)});
+        if(!response.ok)throw Error('Primary unavailable');
+        const body=await response.text();if(body.length>20000)throw Error('Response too large');const data=JSON.parse(body);translated=Array.isArray(data?.[0])?data[0].map(item=>typeof item?.[0]==='string'?item[0]:'').join(''):'';
+      } catch { /* Try a separate public provider below. */ }
+      if(!translated){
+        const response=await fetcher('https://api.mymemory.translated.net/get?q='+encodeURIComponent(text)+'&langpair=en%7Czh-CN',{redirect:'manual',signal:AbortSignal.timeout(6500)});
+        if(!response.ok)throw Error('Fallback unavailable');
+        const body=await response.text();if(body.length>100000)throw Error('Response too large');const data=JSON.parse(body);
+        if(Number(data.responseStatus)!==200||typeof data.responseData?.translatedText!=='string')throw Error('Fallback unavailable');
+        translated=data.responseData.translatedText.replace(/&quot;/g,'"').replace(/&#39;/g,"'").replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>');
+      }
       if(!translated||translated.length>2000)throw Error('翻译返回异常');
       await db.prepare('INSERT INTO github_translations(text_hash,translated,created_at) VALUES (?,?,?) ON CONFLICT(text_hash) DO UPDATE SET translated=excluded.translated,created_at=excluded.created_at').run(key,translated,now());
       await db.prepare('DELETE FROM github_translations WHERE created_at<?').run(now()-30*86400000);await db.prepare('DELETE FROM github_translation_budget WHERE day<?').run(new Date(now()-7*86400000).toISOString().slice(0,10));
