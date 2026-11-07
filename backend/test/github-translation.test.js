@@ -7,3 +7,5 @@ test('中文简介翻译：固定地址、缓存、并发合并、字数限额�
 });
 
 test('首选翻译失败后使用独立备用服务',async()=>{const db=openDatabase(':memory:');const hosts=[];const translate=createGithubTranslation({db,fetcher:async url=>{hosts.push(new URL(url).hostname);if(hosts.length===1)return new Response('',{status:403});return new Response(JSON.stringify({responseStatus:200,responseData:{translatedText:'图片转换工具'}}));}});try{assert.equal((await translate('Image conversion tools')).text,'图片转换工具');assert.deepEqual(hosts,['translate.googleapis.com','api.mymemory.translated.net']);}finally{db.close();}});
+
+test('站内翻译优先、缓存，并拒绝扩写型结果',async()=>{const db=openDatabase(':memory:');let calls=0;const translate=createGithubTranslation({db,translateText:async()=>{calls++;return '用于图像转换的浏览器工具。';},fetcher:async()=>{throw Error('不应调用外部服务');}});try{assert.equal((await translate('Browser tools')).text,'用于图像转换的浏览器工具。');await translate('Browser tools');assert.equal(calls,1);const invalid=createGithubTranslation({db,translateText:async()=> '第一段\n\n虚构功能',fetcher:async()=>{throw Error('不应调用外部服务');}});await assert.rejects(invalid('Other project'));}finally{db.close();}});

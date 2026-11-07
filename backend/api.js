@@ -95,10 +95,10 @@ function createApi(options) {
     if (++bucket.count > 30) return fail(res, 429, '查询过于频繁，请10分钟后重试');
     next();
   }
-  const translateGithub = require('./github-translation').createGithubTranslation({db});
+  const translateGithub = require('./github-translation').createGithubTranslation({db,translateText:options.translatePublicText});
   app.post('/api/github-translate', githubLimit, async (req,res) => {
     try { res.json(await translateGithub(req.body?.text)); }
-    catch(error) { fail(res,[400,429].includes(error.status)?error.status:503,error.status?error.message:'中文翻译暂不可用，请查看原文或稍后重试'); }
+    catch(error) { console.warn('[github-translation]', error.message); fail(res,[400,429].includes(error.status)?error.status:503,error.status?error.message:'中文翻译暂不可用，请查看原文或稍后重试'); }
   });
   for (const [path, lookup] of [
     ['/api/github-search', req => githubBrowser.search(req.query.q, Number(req.query.page || 1))],

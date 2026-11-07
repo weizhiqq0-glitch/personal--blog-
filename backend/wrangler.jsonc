@@ -6,6 +6,7 @@
   "compatibility_date": "2026-11-01",
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
+  "ai": { "binding": "AI" },
   "vars": {
     "EMAIL_PROVIDER": "emailjs",
     "CORS_ORIGINS": "https://weizhiqq0-glitch.github.io"
